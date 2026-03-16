@@ -356,7 +356,6 @@ export function Chat() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const didBootstrapSessions = useRef(false);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -464,11 +463,10 @@ export function Chat() {
   }, [activeSessionId, isSessionSwitching, setActiveSessionId, syncSessionFromServer]);
 
   useEffect(() => {
-    if (!hasHydrated || didBootstrapSessions.current) {
+    if (!hasHydrated) {
       return;
     }
 
-    didBootstrapSessions.current = true;
     let cancelled = false;
 
     const bootstrap = async () => {
@@ -536,9 +534,15 @@ export function Chat() {
       }
     };
 
-    void bootstrap();
+    Promise.resolve().then(() => {
+      if (!cancelled) {
+        void bootstrap();
+      }
+    });
+
     return () => {
       cancelled = true;
+      setIsSessionBootstrapping(false);
     };
   }, [hasHydrated]);
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLeadsStore } from "@/lib/leads-store";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { BarChart3, Loader2, RefreshCw, TrendingUp } from "lucide-react";
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
 
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8080").replace(/\/$/, "");
+const MIN_REFRESH_SPIN_MS = 400;
 
 interface StatusCount {
   status: string;
@@ -147,12 +148,18 @@ export function StatsCards() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [trendPeriod, setTrendPeriod] = useState<"week" | "month">("week");
+  const isFetchingRef = useRef(false);
 
   const leadsVersion = useMemo(() => {
     return leads.map((lead) => `${lead.id}:${lead.updatedAt}`).join("|");
   }, [leads]);
 
   const fetchDashboard = useCallback(async () => {
+    if (isFetchingRef.current) {
+      return;
+    }
+    isFetchingRef.current = true;
+    const startedAt = Date.now();
     setIsLoading(true);
     setError(null);
 
@@ -172,6 +179,13 @@ export function StatsCards() {
     } catch (error) {
       setError(toErrorMessage(error, "加载统计仪表板失败"));
     } finally {
+      const elapsed = Date.now() - startedAt;
+      if (elapsed < MIN_REFRESH_SPIN_MS) {
+        await new Promise((resolve) => {
+          window.setTimeout(resolve, MIN_REFRESH_SPIN_MS - elapsed);
+        });
+      }
+      isFetchingRef.current = false;
       setIsLoading(false);
     }
   }, []);
@@ -202,8 +216,8 @@ export function StatsCards() {
     return (
       <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-6">
         <p className="text-sm text-destructive">{error}</p>
-        <Button size="sm" variant="outline" className="mt-3" onClick={() => void fetchDashboard()}>
-          <RefreshCw className="mr-1 h-4 w-4" />
+        <Button size="sm" variant="outline" className="mt-3" onClick={() => void fetchDashboard()} disabled={isLoading}>
+          <RefreshCw className={cn("mr-1 h-4 w-4", isLoading ? "animate-spin" : "")} />
           重试
         </Button>
       </div>
@@ -221,7 +235,7 @@ export function StatsCards() {
           最近更新：{formatGeneratedAt(dashboard.generated_at)} · 成功率 {dashboard.overview.success_rate.toFixed(1)}%
         </p>
         <Button size="sm" variant="ghost" onClick={() => void fetchDashboard()} disabled={isLoading}>
-          {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+          <RefreshCw className={cn("h-4 w-4", isLoading ? "animate-spin" : "")} />
         </Button>
       </div>
 
