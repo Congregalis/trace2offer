@@ -256,6 +256,45 @@ func TestLeadAndChatAPI(t *testing.T) {
 	if resp.Code != http.StatusOK {
 		t.Fatalf("PUT /api/user/profile status=%d body=%s", resp.Code, resp.Body.String())
 	}
+
+	resp = doJSONRequest(t, router, http.MethodGet, "/api/stats", nil)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("GET /api/stats status=%d body=%s", resp.Code, resp.Body.String())
+	}
+
+	var dashboardPayload struct {
+		Data stats.DashboardStats `json:"data"`
+	}
+	decodeJSONBody(t, resp, &dashboardPayload)
+	if dashboardPayload.Data.Overview.Total == 0 {
+		t.Fatal("dashboard overview total should not be zero")
+	}
+	if len(dashboardPayload.Data.Overview.StatusCounts) == 0 {
+		t.Fatal("dashboard overview should include status counts")
+	}
+	if len(dashboardPayload.Data.Funnel.Stages) != 5 {
+		t.Fatalf("expected 5 funnel stages, got %d", len(dashboardPayload.Data.Funnel.Stages))
+	}
+	if dashboardPayload.Data.WeeklyTrend.Period != "week" {
+		t.Fatalf("expected weekly trend period=week, got %q", dashboardPayload.Data.WeeklyTrend.Period)
+	}
+	if len(dashboardPayload.Data.WeeklyTrend.Points) != 7 {
+		t.Fatalf("expected 7 weekly points, got %d", len(dashboardPayload.Data.WeeklyTrend.Points))
+	}
+	if dashboardPayload.Data.MonthlyTrend.Period != "month" {
+		t.Fatalf("expected monthly trend period=month, got %q", dashboardPayload.Data.MonthlyTrend.Period)
+	}
+	if len(dashboardPayload.Data.MonthlyTrend.Points) != 30 {
+		t.Fatalf("expected 30 monthly points, got %d", len(dashboardPayload.Data.MonthlyTrend.Points))
+	}
+	if len(dashboardPayload.Data.Duration.ByStatus) != 5 {
+		t.Fatalf("expected 5 duration statuses, got %d", len(dashboardPayload.Data.Duration.ByStatus))
+	}
+
+	resp = doJSONRequest(t, router, http.MethodGet, "/api/stats/", nil)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("GET /api/stats/ status=%d body=%s", resp.Code, resp.Body.String())
+	}
 }
 
 type stubAgentRuntime struct {

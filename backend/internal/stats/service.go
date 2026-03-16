@@ -18,6 +18,7 @@ type Service struct {
 // statsCache holds cached statistics with expiration.
 type statsCache struct {
 	summary   SummaryStats
+	dashboard DashboardStats
 	generated time.Time
 }
 
@@ -45,11 +46,11 @@ func (s *Service) invalidateCache() {
 }
 
 // getOrCompute returns cached stats or computes new ones.
-func (s *Service) getOrCompute() SummaryStats {
+func (s *Service) getOrCompute() statsCache {
 	s.cacheMu.RLock()
 	if s.cache != nil && time.Since(s.cache.generated) < s.ttl {
 		defer s.cacheMu.RUnlock()
-		return s.cache.summary
+		return *s.cache
 	}
 	s.cacheMu.RUnlock()
 
@@ -59,35 +60,37 @@ func (s *Service) getOrCompute() SummaryStats {
 
 	// Double-check after acquiring write lock
 	if s.cache != nil && time.Since(s.cache.generated) < s.ttl {
-		return s.cache.summary
+		return *s.cache
 	}
 
 	// Compute fresh stats
 	leads := s.repo.List()
 	calculator := NewCalculator(leads)
 	summary := calculator.CalculateSummary()
+	dashboard := calculator.CalculateDashboard()
 
 	s.cache = &statsCache{
 		summary:   summary,
+		dashboard: dashboard,
 		generated: time.Now(),
 	}
 
-	return summary
+	return *s.cache
 }
 
 // GetOverview returns high-level overview statistics.
 func (s *Service) GetOverview() OverviewStats {
-	return s.getOrCompute().Overview
+	return s.getOrCompute().summary.Overview
 }
 
 // GetFunnel returns conversion funnel statistics.
 func (s *Service) GetFunnel() FunnelStats {
-	return s.getOrCompute().Funnel
+	return s.getOrCompute().summary.Funnel
 }
 
 // GetSources returns source/channel analysis.
 func (s *Service) GetSources() SourceAnalysis {
-	return s.getOrCompute().Sources
+	return s.getOrCompute().summary.Sources
 }
 
 // GetTrends returns time-series trends.
@@ -99,12 +102,17 @@ func (s *Service) GetTrends(period string) TrendStats {
 
 // GetInsights returns AI-style generated insights.
 func (s *Service) GetInsights() InsightStats {
-	return s.getOrCompute().Insights
+	return s.getOrCompute().summary.Insights
 }
 
 // GetSummary returns all statistics combined.
 func (s *Service) GetSummary() SummaryStats {
-	return s.getOrCompute()
+	return s.getOrCompute().summary
+}
+
+// GetDashboard returns the core dashboard payload.
+func (s *Service) GetDashboard() DashboardStats {
+	return s.getOrCompute().dashboard
 }
 
 // InvalidateCache manually invalidates the cache.

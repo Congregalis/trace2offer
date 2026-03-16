@@ -1,6 +1,7 @@
 import { Nav } from "@/components/nav";
 import { LeadsTable } from "@/components/leads-table";
 import { StatsCards } from "@/components/stats-cards";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function HomePage() {
   return (
@@ -14,10 +15,25 @@ export default function HomePage() {
               集中管理你的求职线索和跟进状态
             </p>
           </div>
-          
-          <StatsCards />
-          
-          <LeadsTable />
+
+          <Tabs defaultValue="leads" className="space-y-4">
+            <TabsList className="h-10">
+              <TabsTrigger value="leads" className="px-4">
+                线索管理
+              </TabsTrigger>
+              <TabsTrigger value="dashboard" className="px-4">
+                核心统计仪表盘
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="leads">
+              <LeadsTable />
+            </TabsContent>
+
+            <TabsContent value="dashboard">
+              <StatsCards />
+            </TabsContent>
+          </Tabs>
         </div>
       </main>
     </div>

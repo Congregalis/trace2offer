@@ -76,6 +76,8 @@ func NewRouter(leads storage.LeadStore, runtime AgentRuntime, statsService *stat
 		stats.GET("/trends", h.getStatsTrends)
 		stats.GET("/insights", h.getStatsInsights)
 		stats.GET("/summary", h.getStatsSummary)
+		stats.GET("", h.getStatsDashboard)
+		stats.GET("/", h.getStatsDashboard)
 	}
 
 	return r
@@ -319,6 +321,14 @@ func (h *handler) updateUserProfile(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": profile})
+}
+
+func (h *handler) getStatsDashboard(c *gin.Context) {
+	if h.stats == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "stats service is not configured"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": h.stats.GetDashboard()})
 }
 
 func (h *handler) getStatsOverview(c *gin.Context) {

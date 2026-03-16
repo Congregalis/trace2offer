@@ -11,16 +11,42 @@ import (
 	"trace2offer/backend/internal/model"
 )
 
-// Status labels for display
+// Status labels for display.
 var statusLabels = map[string]string{
-	leadpkg.StatusNew:          "New",
-	leadpkg.StatusPreparing:    "Preparing",
-	leadpkg.StatusApplied:      "Applied",
-	leadpkg.StatusInterviewing: "Interviewing",
-	leadpkg.StatusOffered:      "Offered",
-	leadpkg.StatusDeclined:     "Declined",
-	leadpkg.StatusRejected:     "Rejected",
-	leadpkg.StatusArchived:     "Archived",
+	leadpkg.StatusNew:          "新线索",
+	leadpkg.StatusPreparing:    "准备中",
+	leadpkg.StatusApplied:      "已投递",
+	leadpkg.StatusInterviewing: "面试中",
+	leadpkg.StatusOffered:      "已获 Offer",
+	leadpkg.StatusDeclined:     "已拒绝",
+	leadpkg.StatusRejected:     "被拒绝",
+	leadpkg.StatusArchived:     "已归档",
+}
+
+var orderedStatuses = []string{
+	leadpkg.StatusNew,
+	leadpkg.StatusPreparing,
+	leadpkg.StatusApplied,
+	leadpkg.StatusInterviewing,
+	leadpkg.StatusOffered,
+	leadpkg.StatusDeclined,
+	leadpkg.StatusRejected,
+	leadpkg.StatusArchived,
+}
+
+var funnelStatuses = []string{
+	leadpkg.StatusNew,
+	leadpkg.StatusPreparing,
+	leadpkg.StatusApplied,
+	leadpkg.StatusInterviewing,
+	leadpkg.StatusOffered,
+}
+
+var terminalStatusSet = map[string]struct{}{
+	leadpkg.StatusOffered:  {},
+	leadpkg.StatusDeclined: {},
+	leadpkg.StatusRejected: {},
+	leadpkg.StatusArchived: {},
 }
 
 // Calculator computes statistics from leads.
@@ -43,103 +69,125 @@ func (c *Calculator) CalculateOverview() OverviewStats {
 	active := 0
 	offered := 0
 	thisWeekNew := 0
+	statusCountsMap := make(map[string]int, len(orderedStatuses))
 
-	weekStart := c.now.AddDate(0, 0, -int(c.now.Weekday()))
-	weekStart = time.Date(weekStart.Year(), weekStart.Month(), weekStart.Day(), 0, 0, 0, 0, time.UTC)
+	for _, status := range orderedStatuses {
+		statusCountsMap[status] = 0
+	}
+
+	weekStart := startOfWeekUTC(c.now)
 
 	for _, lead := range c.leads {
-		// Count active (not terminal states)
-		if lead.Status != leadpkg.StatusOffered &&
-			lead.Status != leadpkg.StatusDeclined &&
-			lead.Status != leadpkg.StatusRejected &&
-			lead.Status != leadpkg.StatusArchived {
-			active++
+		status := strings.TrimSpace(lead.Status)
+		if _, ok := statusCountsMap[status]; ok {
+			statusCountsMap[status]++
 		}
 
-		// Count offered
-		if lead.Status == leadpkg.StatusOffered {
+		if isActiveStatus(status) {
+			active++
+		}
+		if status == leadpkg.StatusOffered {
 			offered++
 		}
 
-		// Count this week's new leads
-		if createdAt, err := time.Parse(time.RFC3339, lead.CreatedAt); err == nil {
-			if createdAt.After(weekStart) || createdAt.Equal(weekStart) {
+		if createdAt, ok := parseRFC3339(lead.CreatedAt); ok {
+			if !createdAt.Before(weekStart) {
 				thisWeekNew++
 			}
 		}
 	}
 
 	successRate := 0.0
-	if total > 0 {
-		// Success rate = offered / (offered + rejected + declined)
-		terminalCount := offered
-		for _, lead := range c.leads {
-			if lead.Status == leadpkg.StatusRejected || lead.Status == leadpkg.StatusDeclined {
-				terminalCount++
-			}
+	successPopulation := statusCountsMap[leadpkg.StatusOffered] + statusCountsMap[leadpkg.StatusDeclined] + statusCountsMap[leadpkg.StatusRejected]
+	if successPopulation > 0 {
+		successRate = round1(float64(statusCountsMap[leadpkg.StatusOffered]) / float64(successPopulation) * 100)
+	}
+
+	statusCounts := make([]StatusCount, 0, len(orderedStatuses))
+	for _, status := range orderedStatuses {
+		count := statusCountsMap[status]
+		percentage := 0.0
+		if total > 0 {
+			percentage = round1(float64(count) / float64(total) * 100)
 		}
-		if terminalCount > 0 {
-			successRate = math.Round(float64(offered)/float64(terminalCount)*1000) / 10
-		}
+		statusCounts = append(statusCounts, StatusCount{
+			Status:     status,
+			Label:      statusLabels[status],
+			Count:      count,
+			Percentage: percentage,
+		})
 	}
 
 	return OverviewStats{
-		Total:       total,
-		Active:      active,
-		Offered:     offered,
-		SuccessRate: successRate,
-		ThisWeekNew: thisWeekNew,
-		LastUpdated: c.now.Format(time.RFC3339),
+		Total:        total,
+		Active:       active,
+		Offered:      offered,
+		SuccessRate:  successRate,
+		ThisWeekNew:  thisWeekNew,
+		StatusCounts: statusCounts,
+		LastUpdated:  c.now.Format(time.RFC3339),
 	}
 }
 
 // CalculateFunnel computes the conversion funnel statistics.
 func (c *Calculator) CalculateFunnel() FunnelStats {
-	// Define funnel stages in order
-	stages := []struct {
-		status string
-		label  string
-	}{
-		{leadpkg.StatusNew, statusLabels[leadpkg.StatusNew]},
-		{leadpkg.StatusPreparing, statusLabels[leadpkg.StatusPreparing]},
-		{leadpkg.StatusApplied, statusLabels[leadpkg.StatusApplied]},
-		{leadpkg.StatusInterviewing, statusLabels[leadpkg.StatusInterviewing]},
-		{leadpkg.StatusOffered, statusLabels[leadpkg.StatusOffered]},
+	stageCounts := make(map[string]int, len(funnelStatuses))
+	for _, status := range funnelStatuses {
+		stageCounts[status] = 0
 	}
 
-	// Count leads in each stage
-	stageCounts := make(map[string]int)
 	for _, lead := range c.leads {
-		stageCounts[lead.Status]++
+		status := strings.TrimSpace(lead.Status)
+		if _, ok := stageCounts[status]; ok {
+			stageCounts[status]++
+		}
 	}
 
-	// Calculate funnel stages
-	funnelStages := make([]FunnelStage, 0, len(stages))
-	total := len(c.leads)
+	cumulative := make([]int, len(funnelStatuses))
+	running := 0
+	for i := len(funnelStatuses) - 1; i >= 0; i-- {
+		running += stageCounts[funnelStatuses[i]]
+		cumulative[i] = running
+	}
 
-	for _, s := range stages {
-		count := stageCounts[s.status]
+	entryCount := 0
+	if len(cumulative) > 0 {
+		entryCount = cumulative[0]
+	}
+
+	funnelStages := make([]FunnelStage, 0, len(funnelStatuses))
+	for i, status := range funnelStatuses {
+		stageCount := stageCounts[status]
+		stageCumulative := cumulative[i]
+
 		percentage := 0.0
-		if total > 0 {
-			percentage = math.Round(float64(count)/float64(total)*1000) / 10
+		if entryCount > 0 {
+			percentage = round1(float64(stageCumulative) / float64(entryCount) * 100)
 		}
 
-		// Calculate average days in this stage (simplified - would need transition tracking for accuracy)
-		avgDays := c.calculateAvgDaysInStatus(s.status)
+		conversionFromPrev := 0.0
+		if i == 0 {
+			if entryCount > 0 {
+				conversionFromPrev = 100
+			}
+		} else if cumulative[i-1] > 0 {
+			conversionFromPrev = round1(float64(stageCumulative) / float64(cumulative[i-1]) * 100)
+		}
 
 		funnelStages = append(funnelStages, FunnelStage{
-			Status:     s.status,
-			Label:      s.label,
-			Count:      count,
-			Percentage: percentage,
-			AvgDays:    avgDays,
+			Status:             status,
+			Label:              statusLabels[status],
+			Count:              stageCount,
+			CumulativeCount:    stageCumulative,
+			Percentage:         percentage,
+			ConversionFromPrev: conversionFromPrev,
+			AvgDays:            c.calculateAvgDaysInStatus(status),
 		})
 	}
 
-	// Calculate overall conversion rate (new -> offered)
 	conversion := 0.0
-	if total > 0 && stageCounts[leadpkg.StatusNew] > 0 {
-		conversion = math.Round(float64(stageCounts[leadpkg.StatusOffered])/float64(total)*1000) / 10
+	if entryCount > 0 {
+		conversion = round1(float64(stageCounts[leadpkg.StatusOffered]) / float64(entryCount) * 100)
 	}
 
 	return FunnelStats{
@@ -149,69 +197,115 @@ func (c *Calculator) CalculateFunnel() FunnelStats {
 	}
 }
 
-// calculateAvgDaysInStatus estimates average days leads stay in a status.
-// This is a simplified calculation - in production, you'd track status transitions.
-func (c *Calculator) calculateAvgDaysInStatus(status string) float64 {
-	var totalDays float64
-	var count int
+// CalculateDuration computes average dwell-time analysis by status.
+func (c *Calculator) CalculateDuration() DurationStats {
+	byStatus := make([]DurationStatus, 0, len(funnelStatuses))
+	slowestStatus := ""
+	slowestLabel := ""
+	slowestDays := -1.0
 
+	for _, status := range funnelStatuses {
+		count := 0
+		for _, lead := range c.leads {
+			if strings.TrimSpace(lead.Status) == status {
+				count++
+			}
+		}
+
+		avgDays := c.calculateAvgDaysInStatus(status)
+		byStatus = append(byStatus, DurationStatus{
+			Status:  status,
+			Label:   statusLabels[status],
+			Count:   count,
+			AvgDays: avgDays,
+		})
+
+		if count > 0 && avgDays > slowestDays {
+			slowestDays = avgDays
+			slowestStatus = status
+			slowestLabel = statusLabels[status]
+		}
+	}
+
+	activeDaysTotal := 0.0
+	activeCount := 0
 	for _, lead := range c.leads {
-		if lead.Status != status {
+		status := strings.TrimSpace(lead.Status)
+		if !isActiveStatus(status) {
 			continue
 		}
 
-		createdAt, err := time.Parse(time.RFC3339, lead.CreatedAt)
-		if err != nil {
-			continue
-		}
-
-		updatedAt, err := time.Parse(time.RFC3339, lead.UpdatedAt)
-		if err != nil {
-			updatedAt = c.now
-		}
-
-		days := updatedAt.Sub(createdAt).Hours() / 24
-		totalDays += days
-		count++
+		updatedAt := c.resolveLeadUpdatedAt(lead)
+		activeDaysTotal += durationDays(updatedAt, c.now)
+		activeCount++
 	}
 
-	if count == 0 {
-		return 0
+	averageActiveDays := 0.0
+	if activeCount > 0 {
+		averageActiveDays = round1(activeDaysTotal / float64(activeCount))
 	}
-	return math.Round(totalDays/float64(count)*10) / 10
+
+	return DurationStats{
+		AverageCycleDays:  c.calculateTotalCycleTime(),
+		AverageActiveDays: averageActiveDays,
+		SlowestStatus:     slowestStatus,
+		SlowestLabel:      slowestLabel,
+		ByStatus:          byStatus,
+	}
 }
 
-// calculateTotalCycleTime estimates average total time from new to terminal status.
-func (c *Calculator) calculateTotalCycleTime() float64 {
-	var totalDays float64
-	var count int
-
-	terminalStatuses := map[string]bool{
-		leadpkg.StatusOffered:  true,
-		leadpkg.StatusDeclined: true,
-		leadpkg.StatusRejected: true,
-		leadpkg.StatusArchived: true,
-	}
+// calculateAvgDaysInStatus estimates average dwell days in current status.
+func (c *Calculator) calculateAvgDaysInStatus(status string) float64 {
+	totalDays := 0.0
+	count := 0
 
 	for _, lead := range c.leads {
-		if !terminalStatuses[lead.Status] {
+		if strings.TrimSpace(lead.Status) != status {
 			continue
 		}
 
-		createdAt, err := time.Parse(time.RFC3339, lead.CreatedAt)
-		if err != nil {
-			continue
-		}
-
-		days := c.now.Sub(createdAt).Hours() / 24
-		totalDays += days
+		updatedAt := c.resolveLeadUpdatedAt(lead)
+		totalDays += durationDays(updatedAt, c.now)
 		count++
 	}
 
 	if count == 0 {
 		return 0
 	}
-	return math.Round(totalDays/float64(count)*10) / 10
+
+	return round1(totalDays / float64(count))
+}
+
+// calculateTotalCycleTime estimates average total time from creation to terminal status.
+func (c *Calculator) calculateTotalCycleTime() float64 {
+	totalDays := 0.0
+	count := 0
+
+	for _, lead := range c.leads {
+		status := strings.TrimSpace(lead.Status)
+		if _, terminal := terminalStatusSet[status]; !terminal {
+			continue
+		}
+
+		createdAt, ok := parseRFC3339(lead.CreatedAt)
+		if !ok {
+			continue
+		}
+
+		endedAt := c.resolveLeadUpdatedAt(lead)
+		if endedAt.Before(createdAt) {
+			continue
+		}
+
+		totalDays += durationDays(createdAt, endedAt)
+		count++
+	}
+
+	if count == 0 {
+		return 0
+	}
+
+	return round1(totalDays / float64(count))
 }
 
 // CalculateSources computes source/channel analysis.
@@ -233,7 +327,6 @@ func (c *Calculator) CalculateSources() SourceAnalysis {
 		stats := sourceMap[source]
 		stats.Count++
 
-		// Track progression
 		if lead.Status == leadpkg.StatusApplied {
 			stats.Applied++
 		}
@@ -245,38 +338,34 @@ func (c *Calculator) CalculateSources() SourceAnalysis {
 		}
 	}
 
-	// Convert to slice and calculate percentages
 	total := len(c.leads)
 	sources := make([]SourceStats, 0, len(sourceMap))
 
 	for _, stats := range sourceMap {
 		if total > 0 {
-			stats.Percentage = math.Round(float64(stats.Count)/float64(total)*1000) / 10
+			stats.Percentage = round1(float64(stats.Count) / float64(total) * 100)
 		}
 		if stats.Count > 0 {
-			stats.SuccessRate = math.Round(float64(stats.Offered)/float64(stats.Count)*1000) / 10
+			stats.SuccessRate = round1(float64(stats.Offered) / float64(stats.Count) * 100)
 		}
 		sources = append(sources, *stats)
 	}
 
-	// Sort by count descending
 	sort.Slice(sources, func(i, j int) bool {
 		return sources[i].Count > sources[j].Count
 	})
 
-	// Identify top and best source
 	topSource := ""
 	bestSource := ""
 
 	if len(sources) > 0 {
 		topSource = sources[0].Source
 
-		// Best source has at least 2 leads and highest success rate
 		bestRate := -1.0
-		for _, s := range sources {
-			if s.Count >= 2 && s.SuccessRate > bestRate {
-				bestRate = s.SuccessRate
-				bestSource = s.Source
+		for _, item := range sources {
+			if item.Count >= 2 && item.SuccessRate > bestRate {
+				bestRate = item.SuccessRate
+				bestSource = item.Source
 			}
 		}
 	}
@@ -290,75 +379,47 @@ func (c *Calculator) CalculateSources() SourceAnalysis {
 
 // CalculateTrends computes time-series trends for leads.
 func (c *Calculator) CalculateTrends(period string) TrendStats {
-	// Default to 4 weeks
-	days := 28
-	if period == "month" {
-		days = 30
-	} else if period == "quarter" {
-		days = 90
-	}
+	normalizedPeriod := normalizePeriod(period)
+	days := periodDays(normalizedPeriod)
 
-	// Generate time points
-	points := make([]TimePoint, 0)
-	now := c.now
+	points := make([]TimePoint, 0, days)
+	endOfToday := startOfDayUTC(c.now)
 
 	for i := days - 1; i >= 0; i-- {
-		date := now.AddDate(0, 0, -i)
-		dateStr := date.Format("2006-01-02")
+		dayStart := endOfToday.AddDate(0, 0, -i)
+		dayEnd := dayStart.Add(24 * time.Hour)
+		dateKey := dayStart.Format("2006-01-02")
 
-		// Count new leads on this date
 		newCount := 0
 		movedCount := 0
-
-		for _, lead := range c.leads {
-			// Check if created on this date
-			createdAt, err := time.Parse(time.RFC3339, lead.CreatedAt)
-			if err == nil {
-				if createdAt.Format("2006-01-02") == dateStr {
-					newCount++
-				}
-			}
-
-			// Check if status changed on this date (simplified - check updated)
-			updatedAt, err := time.Parse(time.RFC3339, lead.UpdatedAt)
-			if err == nil {
-				if updatedAt.Format("2006-01-02") == dateStr {
-					// Only count as "moved" if not new
-					createdAt, _ := time.Parse(time.RFC3339, lead.CreatedAt)
-					if createdAt.Format("2006-01-02") != dateStr {
-						movedCount++
-					}
-				}
-			}
-		}
-
-		// Calculate total active leads up to this date
 		totalActive := 0
+
 		for _, lead := range c.leads {
-			createdAt, err := time.Parse(time.RFC3339, lead.CreatedAt)
-			if err != nil {
-				continue
+			createdAt, createdOK := parseRFC3339(lead.CreatedAt)
+			if createdOK && !createdAt.Before(dayStart) && createdAt.Before(dayEnd) {
+				newCount++
 			}
-			// If lead was created on or before this date
-			if createdAt.Before(date) || createdAt.Equal(date) {
-				// And hasn't been archived/rejected/declined before this date
-				if lead.Status != leadpkg.StatusArchived &&
-					lead.Status != leadpkg.StatusRejected &&
-					lead.Status != leadpkg.StatusDeclined {
-					totalActive++
+
+			updatedAt, updatedOK := parseRFC3339(lead.UpdatedAt)
+			if updatedOK && !updatedAt.Before(dayStart) && updatedAt.Before(dayEnd) {
+				createdSameDay := createdOK && createdAt.Format("2006-01-02") == dateKey
+				if !createdSameDay {
+					movedCount++
 				}
+			}
+
+			if createdOK && createdAt.Before(dayEnd) && isActiveStatus(lead.Status) {
+				totalActive++
 			}
 		}
 
-		label := date.Format("1/2")
-		if i == days-1 {
-			label = "Start"
-		} else if i == 0 {
-			label = "Today"
+		label := dayStart.Format("1/2")
+		if normalizedPeriod == "week" {
+			label = dayStart.Format("Mon")
 		}
 
 		points = append(points, TimePoint{
-			Date:  dateStr,
+			Date:  dateKey,
 			Label: label,
 			New:   newCount,
 			Moved: movedCount,
@@ -366,29 +427,10 @@ func (c *Calculator) CalculateTrends(period string) TrendStats {
 		})
 	}
 
-	// Calculate growth rate
-	growth := 0.0
-	isGrowing := false
-
-	if len(points) >= 7 {
-		firstWeek := 0
-		lastWeek := 0
-		for i, p := range points {
-			if i < 7 {
-				firstWeek += p.New
-			}
-			if i >= len(points)-7 {
-				lastWeek += p.New
-			}
-		}
-		if firstWeek > 0 {
-			growth = math.Round(float64(lastWeek-firstWeek)/float64(firstWeek)*1000) / 10
-		}
-		isGrowing = lastWeek >= firstWeek
-	}
+	growth, isGrowing := calculateGrowth(points)
 
 	return TrendStats{
-		Period:    period,
+		Period:    normalizedPeriod,
 		Points:    points,
 		Growth:    growth,
 		IsGrowing: isGrowing,
@@ -399,26 +441,22 @@ func (c *Calculator) CalculateTrends(period string) TrendStats {
 func (c *Calculator) CalculateInsights() InsightStats {
 	insights := make([]InsightItem, 0)
 
-	// Get basic stats for analysis
 	overview := c.CalculateOverview()
 	sources := c.CalculateSources()
 	funnel := c.CalculateFunnel()
+	duration := c.CalculateDuration()
 
-	// 1. Check for stagnant high-priority leads
 	highPriorityStagnant := 0
 	for _, lead := range c.leads {
-		if lead.Priority >= 4 && lead.Status != leadpkg.StatusOffered &&
-			lead.Status != leadpkg.StatusRejected &&
-			lead.Status != leadpkg.StatusDeclined &&
-			lead.Status != leadpkg.StatusArchived {
-			// Check if updated recently
-			updatedAt, err := time.Parse(time.RFC3339, lead.UpdatedAt)
-			if err == nil {
-				daysSince := c.now.Sub(updatedAt).Hours() / 24
-				if daysSince > 3 {
-					highPriorityStagnant++
-				}
-			}
+		status := strings.TrimSpace(lead.Status)
+		if lead.Priority < 4 || !isActiveStatus(status) {
+			continue
+		}
+
+		updatedAt := c.resolveLeadUpdatedAt(lead)
+		daysSince := durationDays(updatedAt, c.now)
+		if daysSince > 3 {
+			highPriorityStagnant++
 		}
 	}
 
@@ -436,7 +474,6 @@ func (c *Calculator) CalculateInsights() InsightStats {
 		})
 	}
 
-	// 2. Analyze conversion rate
 	if overview.Total > 5 {
 		if funnel.Conversion < 10 {
 			insights = append(insights, InsightItem{
@@ -451,18 +488,30 @@ func (c *Calculator) CalculateInsights() InsightStats {
 				Type:     "performance",
 				Severity: "info",
 				Title:    "转化率优秀",
-				Message:  fmt.Sprintf("你的转化率达到了 %.1f%%，表现非常出色！", funnel.Conversion),
+				Message:  fmt.Sprintf("你的转化率达到了 %.1f%%，表现非常出色。", funnel.Conversion),
 				Action:   "继续保持",
 			})
 		}
 	}
 
-	// 3. Source analysis
+	for _, item := range duration.ByStatus {
+		if item.Status == leadpkg.StatusInterviewing && item.Count > 0 && item.AvgDays >= 14 {
+			insights = append(insights, InsightItem{
+				Type:     "duration",
+				Severity: "warning",
+				Title:    "面试阶段停留偏久",
+				Message:  fmt.Sprintf("面试阶段平均停留 %.1f 天，建议主动跟进面试反馈。", item.AvgDays),
+				Action:   "查看面试中线索",
+			})
+			break
+		}
+	}
+
 	if sources.BestSource != "" && sources.BestSource != sources.TopSource {
 		bestRate := 0.0
-		for _, s := range sources.Sources {
-			if s.Source == sources.BestSource {
-				bestRate = s.SuccessRate
+		for _, item := range sources.Sources {
+			if item.Source == sources.BestSource {
+				bestRate = item.SuccessRate
 				break
 			}
 		}
@@ -476,7 +525,6 @@ func (c *Calculator) CalculateInsights() InsightStats {
 		})
 	}
 
-	// 4. Activity check
 	if overview.ThisWeekNew == 0 && overview.Total > 0 {
 		insights = append(insights, InsightItem{
 			Type:     "activity",
@@ -487,20 +535,16 @@ func (c *Calculator) CalculateInsights() InsightStats {
 		})
 	}
 
-	// 5. Success celebration
 	if overview.Offered > 0 {
-		// Check if there's a recent offer (within last 7 days)
 		recentOffer := false
 		for _, lead := range c.leads {
-			if lead.Status == leadpkg.StatusOffered {
-				updatedAt, err := time.Parse(time.RFC3339, lead.UpdatedAt)
-				if err == nil {
-					daysSince := c.now.Sub(updatedAt).Hours() / 24
-					if daysSince <= 7 {
-						recentOffer = true
-						break
-					}
-				}
+			if strings.TrimSpace(lead.Status) != leadpkg.StatusOffered {
+				continue
+			}
+			updatedAt := c.resolveLeadUpdatedAt(lead)
+			if durationDays(updatedAt, c.now) <= 7 {
+				recentOffer = true
+				break
 			}
 		}
 
@@ -508,14 +552,13 @@ func (c *Calculator) CalculateInsights() InsightStats {
 			insights = append(insights, InsightItem{
 				Type:     "milestone",
 				Severity: "success",
-				Title:    "🎉 恭喜获得 Offer！",
-				Message:  "你最近收到了一个 Offer，这是对你努力的认可！",
+				Title:    "恭喜获得 Offer",
+				Message:  "你最近收到了一个 Offer，这是对你努力的认可。",
 				Action:   "查看 Offer 详情",
 			})
 		}
 	}
 
-	// Count by severity
 	urgent := 0
 	for _, insight := range insights {
 		if insight.Severity == "critical" || insight.Severity == "warning" {
@@ -539,7 +582,127 @@ func (c *Calculator) CalculateSummary() SummaryStats {
 		Funnel:    c.CalculateFunnel(),
 		Sources:   c.CalculateSources(),
 		Trends:    c.CalculateTrends("month"),
+		Duration:  c.CalculateDuration(),
 		Insights:  c.CalculateInsights(),
 		Generated: c.now,
 	}
+}
+
+// CalculateDashboard computes the core dashboard payload.
+func (c *Calculator) CalculateDashboard() DashboardStats {
+	return DashboardStats{
+		Overview:     c.CalculateOverview(),
+		Funnel:       c.CalculateFunnel(),
+		WeeklyTrend:  c.CalculateTrends("week"),
+		MonthlyTrend: c.CalculateTrends("month"),
+		Duration:     c.CalculateDuration(),
+		Generated:    c.now,
+	}
+}
+
+func (c *Calculator) resolveLeadUpdatedAt(lead model.Lead) time.Time {
+	if updatedAt, ok := parseRFC3339(lead.UpdatedAt); ok {
+		return updatedAt
+	}
+	if createdAt, ok := parseRFC3339(lead.CreatedAt); ok {
+		return createdAt
+	}
+	return c.now
+}
+
+func isActiveStatus(status string) bool {
+	_, terminal := terminalStatusSet[strings.TrimSpace(status)]
+	return !terminal
+}
+
+func normalizePeriod(period string) string {
+	switch strings.TrimSpace(strings.ToLower(period)) {
+	case "week":
+		return "week"
+	case "quarter":
+		return "quarter"
+	case "month", "monthly", "":
+		return "month"
+	default:
+		return "month"
+	}
+}
+
+func periodDays(period string) int {
+	switch period {
+	case "week":
+		return 7
+	case "quarter":
+		return 90
+	case "month":
+		fallthrough
+	default:
+		return 30
+	}
+}
+
+func calculateGrowth(points []TimePoint) (float64, bool) {
+	if len(points) < 2 {
+		return 0, false
+	}
+
+	window := 7
+	if len(points) < 14 {
+		window = len(points) / 2
+	}
+	if window == 0 {
+		return 0, false
+	}
+
+	firstWindow := 0
+	lastWindow := 0
+	for i := 0; i < window; i++ {
+		firstWindow += points[i].New
+		lastWindow += points[len(points)-window+i].New
+	}
+
+	growth := 0.0
+	if firstWindow > 0 {
+		growth = round1(float64(lastWindow-firstWindow) / float64(firstWindow) * 100)
+	} else if lastWindow > 0 {
+		growth = 100
+	}
+
+	return growth, lastWindow >= firstWindow
+}
+
+func parseRFC3339(raw string) (time.Time, bool) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return time.Time{}, false
+	}
+	parsed, err := time.Parse(time.RFC3339, value)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return parsed.UTC(), true
+}
+
+func round1(value float64) float64 {
+	return math.Round(value*10) / 10
+}
+
+func startOfWeekUTC(ts time.Time) time.Time {
+	dayStart := startOfDayUTC(ts)
+	weekday := int(dayStart.Weekday())
+	if weekday == 0 {
+		weekday = 7
+	}
+	return dayStart.AddDate(0, 0, -(weekday - 1))
+}
+
+func startOfDayUTC(ts time.Time) time.Time {
+	return time.Date(ts.Year(), ts.Month(), ts.Day(), 0, 0, 0, 0, time.UTC)
+}
+
+func durationDays(start time.Time, end time.Time) float64 {
+	if end.Before(start) {
+		return 0
+	}
+	return end.Sub(start).Hours() / 24
 }
