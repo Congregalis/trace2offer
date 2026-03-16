@@ -1,0 +1,14 @@
+# macOS
+.DS_Store
+
+# Editor / logs
+*.log
+
+# Web build/runtime artifacts
+web/node_modules/
+web/.next/
+web/.turbo/
+web/tsconfig.tsbuildinfo
+
+# Backend runtime artifacts
+backend/data
