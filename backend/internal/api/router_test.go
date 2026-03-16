@@ -12,6 +12,7 @@ import (
 	"time"
 
 	agentruntime "trace2offer/backend/agent"
+	"trace2offer/backend/internal/calendar"
 	"trace2offer/backend/internal/heartbeat"
 	"trace2offer/backend/internal/model"
 	"trace2offer/backend/internal/reminder"
@@ -39,7 +40,7 @@ func TestLeadAndChatAPI(t *testing.T) {
 	}
 	_ = heartbeatService.RunOnce(time.Now().UTC())
 
-	router := NewRouter(leadStore, &stubAgentRuntime{}, statsService, reminderService, heartbeatService)
+	router := NewRouter(leadStore, &stubAgentRuntime{}, statsService, reminderService, heartbeatService, calendar.NewService(leadStore))
 
 	resp := doJSONRequest(t, router, http.MethodGet, "/api/leads", nil)
 	if resp.Code != http.StatusOK {
@@ -323,6 +324,21 @@ func TestLeadAndChatAPI(t *testing.T) {
 	resp = doJSONRequest(t, router, http.MethodGet, "/api/heartbeat/reports/latest", nil)
 	if resp.Code != http.StatusOK {
 		t.Fatalf("GET /api/heartbeat/reports/latest status=%d body=%s", resp.Code, resp.Body.String())
+	}
+
+	resp = doJSONRequest(t, router, http.MethodGet, "/api/calendar/interviews.ics", nil)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("GET /api/calendar/interviews.ics status=%d body=%s", resp.Code, resp.Body.String())
+	}
+
+	resp = doJSONRequest(t, router, "PROPFIND", "/api/caldav", nil)
+	if resp.Code != http.StatusMultiStatus {
+		t.Fatalf("PROPFIND /api/caldav status=%d body=%s", resp.Code, resp.Body.String())
+	}
+
+	resp = doJSONRequest(t, router, "REPORT", "/api/caldav/trace2offer", nil)
+	if resp.Code != http.StatusMultiStatus {
+		t.Fatalf("REPORT /api/caldav/trace2offer status=%d body=%s", resp.Code, resp.Body.String())
 	}
 }
 

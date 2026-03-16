@@ -12,6 +12,7 @@ import (
 
 	"trace2offer/backend/agent"
 	"trace2offer/backend/internal/api"
+	"trace2offer/backend/internal/calendar"
 	appconfig "trace2offer/backend/internal/config"
 	"trace2offer/backend/internal/heartbeat"
 	"trace2offer/backend/internal/lead"
@@ -42,6 +43,7 @@ func main() {
 	}
 	statsService := stats.NewService(leadStore)
 	reminderService := reminder.NewService(leadStore)
+	calendarService := calendar.NewService(leadStore)
 	heartbeatService, err := heartbeat.NewService(heartbeat.Config{
 		DataDir:         dataDir,
 		Interval:        30 * time.Minute,
@@ -83,7 +85,7 @@ func main() {
 
 	go heartbeatService.Start(context.Background())
 
-	router := api.NewRouter(leadStore, runtime, statsService, reminderService, heartbeatService)
+	router := api.NewRouter(leadStore, runtime, statsService, reminderService, heartbeatService, calendarService)
 	addr := ":" + port
 	log.Printf("trace2offer backend listening on %s", addr)
 	if err := router.Run(addr); err != nil {

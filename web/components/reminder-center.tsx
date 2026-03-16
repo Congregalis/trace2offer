@@ -163,6 +163,11 @@ export function ReminderCenter() {
               开启系统通知
             </Button>
           ) : null}
+          <Button size="sm" variant="outline" asChild>
+            <a href={`${API_BASE_URL}/api/calendar/interviews.ics`} target="_blank" rel="noopener noreferrer">
+              导出 ICS
+            </a>
+          </Button>
           <Button size="sm" variant="ghost" onClick={() => void fetchDueReminders()} disabled={isLoading}>
             <RefreshCw className={cn("h-4 w-4", isLoading ? "animate-spin" : "")} />
           </Button>

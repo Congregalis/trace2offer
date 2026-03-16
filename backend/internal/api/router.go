@@ -1,8 +1,11 @@
 package api
 
 import (
+	"bytes"
 	"context"
+	"encoding/xml"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -10,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	agentruntime "trace2offer/backend/agent"
+	"trace2offer/backend/internal/calendar"
 	"trace2offer/backend/internal/heartbeat"
 	"trace2offer/backend/internal/lead"
 	"trace2offer/backend/internal/model"
@@ -36,9 +40,10 @@ type handler struct {
 	stats        *stats.Service
 	reminders    *reminder.Service
 	heartbeat    *heartbeat.Service
+	calendar     *calendar.Service
 }
 
-func NewRouter(leads storage.LeadStore, runtime AgentRuntime, statsService *stats.Service, reminderService *reminder.Service, heartbeatService *heartbeat.Service) *gin.Engine {
+func NewRouter(leads storage.LeadStore, runtime AgentRuntime, statsService *stats.Service, reminderService *reminder.Service, heartbeatService *heartbeat.Service, calendarService *calendar.Service) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery(), corsMiddleware())
 
@@ -48,6 +53,7 @@ func NewRouter(leads storage.LeadStore, runtime AgentRuntime, statsService *stat
 		stats:        statsService,
 		reminders:    reminderService,
 		heartbeat:    heartbeatService,
+		calendar:     calendarService,
 	}
 
 	r.GET("/health", func(c *gin.Context) {
@@ -91,6 +97,14 @@ func NewRouter(leads storage.LeadStore, runtime AgentRuntime, statsService *stat
 		heartbeat := api.Group("/heartbeat")
 		heartbeat.GET("/status", h.getHeartbeatStatus)
 		heartbeat.GET("/reports/latest", h.getHeartbeatReportsLatest)
+
+		api.GET("/calendar/interviews.ics", h.exportInterviewICS)
+		api.GET("/caldav/trace2offer", h.exportInterviewICS)
+		api.Handle("OPTIONS", "/caldav", h.handleCalDAVOptions)
+		api.Handle("OPTIONS", "/caldav/trace2offer", h.handleCalDAVOptions)
+		api.Handle("PROPFIND", "/caldav", h.handleCalDAVPropfind)
+		api.Handle("PROPFIND", "/caldav/trace2offer", h.handleCalDAVPropfind)
+		api.Handle("REPORT", "/caldav/trace2offer", h.handleCalDAVReport)
 	}
 
 	return r
@@ -423,6 +437,59 @@ func (h *handler) getHeartbeatReportsLatest(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": reports})
 }
 
+func (h *handler) exportInterviewICS(c *gin.Context) {
+	if h.calendar == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "calendar service is not configured"})
+		return
+	}
+	ics, err := h.calendar.BuildInterviewICS()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "generate calendar export failed", "error": err.Error()})
+		return
+	}
+
+	c.Header("Content-Type", "text/calendar; charset=utf-8")
+	c.Header("Content-Disposition", `attachment; filename="trace2offer-interviews.ics"`)
+	c.String(http.StatusOK, ics)
+}
+
+func (h *handler) handleCalDAVOptions(c *gin.Context) {
+	c.Header("DAV", "1, 2, calendar-access")
+	c.Header("Allow", "OPTIONS, PROPFIND, REPORT, GET")
+	c.Header("Content-Length", "0")
+	c.Status(http.StatusNoContent)
+}
+
+func (h *handler) handleCalDAVPropfind(c *gin.Context) {
+	requestPath := strings.TrimSpace(c.Request.URL.Path)
+	rootPath := "/api/caldav"
+	calendarPath := "/api/caldav/trace2offer"
+
+	c.Header("Content-Type", "application/xml; charset=utf-8")
+	c.Status(http.StatusMultiStatus)
+	if requestPath == rootPath {
+		c.String(http.StatusMultiStatus, buildCalDAVRootMultiStatus(rootPath, calendarPath))
+		return
+	}
+	c.String(http.StatusMultiStatus, buildCalDAVCalendarMultiStatus(calendarPath))
+}
+
+func (h *handler) handleCalDAVReport(c *gin.Context) {
+	if h.calendar == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "calendar service is not configured"})
+		return
+	}
+
+	ics, err := h.calendar.BuildInterviewICS()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "generate caldav report failed", "error": err.Error()})
+		return
+	}
+
+	c.Header("Content-Type", "application/xml; charset=utf-8")
+	c.String(http.StatusMultiStatus, buildCalDAVReportResponse("/api/caldav/trace2offer", ics))
+}
+
 func (h *handler) importUserProfile(c *gin.Context) {
 	if h.agentRuntime == nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "agent runtime is not configured"})
@@ -489,7 +556,7 @@ func corsMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")
 		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
-		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS, PROPFIND, REPORT")
 
 		if c.Request.Method == http.MethodOptions {
 			c.AbortWithStatus(http.StatusNoContent)
@@ -498,4 +565,75 @@ func corsMiddleware() gin.HandlerFunc {
 
 		c.Next()
 	}
+}
+
+func buildCalDAVRootMultiStatus(rootPath string, calendarPath string) string {
+	return fmt.Sprintf(`<?xml version="1.0" encoding="utf-8"?>
+<d:multistatus xmlns:d="DAV:" xmlns:cs="http://calendarserver.org/ns/" xmlns:cal="urn:ietf:params:xml:ns:caldav">
+  <d:response>
+    <d:href>%s</d:href>
+    <d:propstat>
+      <d:prop>
+        <d:displayname>Trace2Offer CalDAV</d:displayname>
+      </d:prop>
+      <d:status>HTTP/1.1 200 OK</d:status>
+    </d:propstat>
+  </d:response>
+  <d:response>
+    <d:href>%s</d:href>
+    <d:propstat>
+      <d:prop>
+        <d:displayname>Trace2Offer Interviews</d:displayname>
+        <d:resourcetype>
+          <d:collection/>
+          <cal:calendar/>
+        </d:resourcetype>
+      </d:prop>
+      <d:status>HTTP/1.1 200 OK</d:status>
+    </d:propstat>
+  </d:response>
+</d:multistatus>`, rootPath, calendarPath)
+}
+
+func buildCalDAVCalendarMultiStatus(calendarPath string) string {
+	return fmt.Sprintf(`<?xml version="1.0" encoding="utf-8"?>
+<d:multistatus xmlns:d="DAV:" xmlns:cal="urn:ietf:params:xml:ns:caldav">
+  <d:response>
+    <d:href>%s</d:href>
+    <d:propstat>
+      <d:prop>
+        <d:displayname>Trace2Offer Interviews</d:displayname>
+        <d:resourcetype>
+          <d:collection/>
+          <cal:calendar/>
+        </d:resourcetype>
+        <cal:supported-calendar-component-set>
+          <cal:comp name="VEVENT"/>
+        </cal:supported-calendar-component-set>
+      </d:prop>
+      <d:status>HTTP/1.1 200 OK</d:status>
+    </d:propstat>
+  </d:response>
+</d:multistatus>`, calendarPath)
+}
+
+func buildCalDAVReportResponse(calendarPath string, ics string) string {
+	return fmt.Sprintf(`<?xml version="1.0" encoding="utf-8"?>
+<d:multistatus xmlns:d="DAV:" xmlns:cal="urn:ietf:params:xml:ns:caldav">
+  <d:response>
+    <d:href>%s</d:href>
+    <d:propstat>
+      <d:prop>
+        <cal:calendar-data>%s</cal:calendar-data>
+      </d:prop>
+      <d:status>HTTP/1.1 200 OK</d:status>
+    </d:propstat>
+  </d:response>
+</d:multistatus>`, calendarPath, xmlEscape(ics))
+}
+
+func xmlEscape(raw string) string {
+	var buffer bytes.Buffer
+	_ = xml.EscapeText(&buffer, []byte(raw))
+	return buffer.String()
 }
