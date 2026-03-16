@@ -36,3 +36,17 @@ type LeadMutationInput struct {
 	JDURL             string   `json:"jd_url"`
 	Location          string   `json:"location"`
 }
+
+// LeadTimelineStage stores one stage interval on a lead timeline.
+type LeadTimelineStage struct {
+	Stage     string `json:"stage"`
+	StartedAt string `json:"started_at"`
+	EndedAt   string `json:"ended_at,omitempty"`
+}
+
+// LeadTimeline stores stage history for one lead.
+type LeadTimeline struct {
+	LeadID    string              `json:"lead_id"`
+	Stages    []LeadTimelineStage `json:"stages,omitempty"`
+	UpdatedAt string              `json:"updated_at,omitempty"`
+}

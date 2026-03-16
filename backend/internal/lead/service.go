@@ -72,6 +72,13 @@ type Repository interface {
 	Delete(id string) (bool, error)
 }
 
+// StatusObserver receives lead lifecycle updates, typically for timeline tracking.
+type StatusObserver interface {
+	OnLeadCreated(lead model.Lead)
+	OnLeadUpdated(before model.Lead, after model.Lead)
+	OnLeadDeleted(leadID string)
+}
+
 // Manager is the reusable lead CRUD contract shared by API and Agent tools.
 type Manager interface {
 	List() []model.Lead
@@ -106,11 +113,20 @@ func IsValidationError(err error) bool {
 
 // Service holds lead business rules and input normalization.
 type Service struct {
-	repo Repository
+	repo     Repository
+	observer StatusObserver
 }
 
 func NewService(repo Repository) *Service {
 	return &Service{repo: repo}
+}
+
+func (s *Service) WithStatusObserver(observer StatusObserver) *Service {
+	if s == nil {
+		return s
+	}
+	s.observer = observer
+	return s
 }
 
 func (s *Service) List() []model.Lead {
@@ -130,7 +146,14 @@ func (s *Service) Create(input model.LeadMutationInput) (model.Lead, error) {
 		return model.Lead{}, err
 	}
 
-	return s.repo.Create(normalized)
+	created, err := s.repo.Create(normalized)
+	if err != nil {
+		return model.Lead{}, err
+	}
+	if s.observer != nil {
+		s.observer.OnLeadCreated(created)
+	}
+	return created, nil
 }
 
 func (s *Service) Update(id string, input model.LeadMutationInput) (model.Lead, bool, error) {
@@ -148,7 +171,15 @@ func (s *Service) Update(id string, input model.LeadMutationInput) (model.Lead, 
 		return model.Lead{}, false, err
 	}
 
-	return s.repo.Update(normalizedID, normalizedInput)
+	before, _ := s.findByID(normalizedID)
+	updated, found, err := s.repo.Update(normalizedID, normalizedInput)
+	if err != nil {
+		return model.Lead{}, false, err
+	}
+	if found && s.observer != nil {
+		s.observer.OnLeadUpdated(before, updated)
+	}
+	return updated, found, nil
 }
 
 func (s *Service) Delete(id string) (bool, error) {
@@ -161,7 +192,27 @@ func (s *Service) Delete(id string) (bool, error) {
 		return false, err
 	}
 
-	return s.repo.Delete(normalizedID)
+	deleted, err := s.repo.Delete(normalizedID)
+	if err != nil {
+		return false, err
+	}
+	if deleted && s.observer != nil {
+		s.observer.OnLeadDeleted(normalizedID)
+	}
+	return deleted, nil
+}
+
+func (s *Service) findByID(id string) (model.Lead, bool) {
+	if s == nil || s.repo == nil {
+		return model.Lead{}, false
+	}
+
+	for _, item := range s.repo.List() {
+		if item.ID == id {
+			return item, true
+		}
+	}
+	return model.Lead{}, false
 }
 
 func NormalizeLeadID(id string) (string, error) {

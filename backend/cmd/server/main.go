@@ -19,6 +19,7 @@ import (
 	"trace2offer/backend/internal/reminder"
 	"trace2offer/backend/internal/stats"
 	"trace2offer/backend/internal/storage"
+	"trace2offer/backend/internal/timeline"
 )
 
 func main() {
@@ -41,6 +42,12 @@ func main() {
 	if err != nil {
 		log.Fatalf("init lead store failed: %v", err)
 	}
+	leadTimelineStore, err := storage.NewFileLeadTimelineStore(filepath.Join(dataDir, "lead_timelines.json"))
+	if err != nil {
+		log.Fatalf("init lead timeline store failed: %v", err)
+	}
+	timelineService := timeline.NewService(leadTimelineStore)
+	leadManager := lead.NewService(leadStore).WithStatusObserver(timelineService)
 	statsService := stats.NewService(leadStore)
 	reminderService := reminder.NewService(leadStore)
 	calendarService := calendar.NewService(leadStore)
@@ -68,7 +75,7 @@ func main() {
 		SessionDataPath:     getenv("T2O_AGENT_SESSION_DATA", filepath.Join(dataDir, "sessions")),
 		MemoryDataPath:      getenv("T2O_AGENT_MEMORY_DATA", filepath.Join(dataDir, "agent_memory.json")),
 		UserProfileDataPath: getenv("T2O_AGENT_USER_PROFILE_DATA", filepath.Join(dataDir, "user_profile.json")),
-		LeadManager:         lead.NewService(leadStore),
+		LeadManager:         leadManager,
 		StatsProvider:       statsService,
 		Defaults: agent.RuntimeSettings{
 			Model:                model,
@@ -85,7 +92,7 @@ func main() {
 
 	go heartbeatService.Start(context.Background())
 
-	router := api.NewRouter(leadStore, runtime, statsService, reminderService, heartbeatService, calendarService)
+	router := api.NewRouter(leadStore, leadTimelineStore, runtime, statsService, reminderService, heartbeatService, calendarService)
 	addr := ":" + port
 	log.Printf("trace2offer backend listening on %s", addr)
 	if err := router.Run(addr); err != nil {

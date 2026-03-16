@@ -20,6 +20,7 @@ import (
 	"trace2offer/backend/internal/reminder"
 	"trace2offer/backend/internal/stats"
 	"trace2offer/backend/internal/storage"
+	"trace2offer/backend/internal/timeline"
 )
 
 type AgentRuntime interface {
@@ -41,19 +42,22 @@ type handler struct {
 	reminders    *reminder.Service
 	heartbeat    *heartbeat.Service
 	calendar     *calendar.Service
+	timelines    *timeline.Service
 }
 
-func NewRouter(leads storage.LeadStore, runtime AgentRuntime, statsService *stats.Service, reminderService *reminder.Service, heartbeatService *heartbeat.Service, calendarService *calendar.Service) *gin.Engine {
+func NewRouter(leads storage.LeadStore, leadTimelines storage.LeadTimelineStore, runtime AgentRuntime, statsService *stats.Service, reminderService *reminder.Service, heartbeatService *heartbeat.Service, calendarService *calendar.Service) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery(), corsMiddleware())
 
+	timelineService := timeline.NewService(leadTimelines)
 	h := &handler{
-		leads:        lead.NewService(leads),
+		leads:        lead.NewService(leads).WithStatusObserver(timelineService),
 		agentRuntime: runtime,
 		stats:        statsService,
 		reminders:    reminderService,
 		heartbeat:    heartbeatService,
 		calendar:     calendarService,
+		timelines:    timelineService,
 	}
 
 	r.GET("/health", func(c *gin.Context) {
@@ -67,6 +71,7 @@ func NewRouter(leads storage.LeadStore, runtime AgentRuntime, statsService *stat
 		api.PUT("/leads/:id", h.updateLead)
 		api.PATCH("/leads/:id", h.updateLead)
 		api.DELETE("/leads/:id", h.deleteLead)
+		api.GET("/lead-timelines", h.listLeadTimelines)
 
 		agent := api.Group("/agent")
 		agent.POST("/chat", h.chatWithAgent)
@@ -175,6 +180,14 @@ func (h *handler) deleteLead(c *gin.Context) {
 	}
 
 	c.Status(http.StatusNoContent)
+}
+
+func (h *handler) listLeadTimelines(c *gin.Context) {
+	if h.timelines == nil {
+		c.JSON(http.StatusOK, gin.H{"data": []model.LeadTimeline{}})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": h.timelines.List()})
 }
 
 func (h *handler) chatWithAgent(c *gin.Context) {

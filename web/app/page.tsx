@@ -1,5 +1,6 @@
 import { Nav } from "@/components/nav";
 import { LeadsTable } from "@/components/leads-table";
+import { LeadTimelineBoard } from "@/components/lead-timeline-board";
 import { ReminderCenter } from "@/components/reminder-center";
 import { StatsCards } from "@/components/stats-cards";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -31,7 +32,30 @@ export default function HomePage() {
             </TabsList>
 
             <TabsContent value="leads">
-              <LeadsTable />
+              <Tabs defaultValue="table" className="space-y-3">
+                <TabsList className="h-8 rounded-md bg-transparent p-0">
+                  <TabsTrigger
+                    value="table"
+                    className="h-7 rounded-md px-3 text-xs font-normal text-muted-foreground data-[state=active]:bg-muted/60 data-[state=active]:text-foreground data-[state=active]:shadow-none dark:data-[state=active]:bg-muted/50"
+                  >
+                    表格管理
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="timeline"
+                    className="h-7 rounded-md px-3 text-xs font-normal text-muted-foreground data-[state=active]:bg-muted/60 data-[state=active]:text-foreground data-[state=active]:shadow-none dark:data-[state=active]:bg-muted/50"
+                  >
+                    时间线
+                  </TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="table">
+                  <LeadsTable />
+                </TabsContent>
+
+                <TabsContent value="timeline">
+                  <LeadTimelineBoard />
+                </TabsContent>
+              </Tabs>
             </TabsContent>
 
             <TabsContent value="dashboard">

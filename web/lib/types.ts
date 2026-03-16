@@ -45,6 +45,18 @@ export interface LeadMutationInput {
   location: string;
 }
 
+export interface LeadTimeline {
+  leadId: string;
+  stages: LeadTimelineStage[];
+  updatedAt: string;
+}
+
+export interface LeadTimelineStage {
+  stage: string;
+  startedAt: string;
+  endedAt: string;
+}
+
 export interface Message {
   id: string;
   role: "user" | "assistant";

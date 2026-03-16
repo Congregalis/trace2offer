@@ -28,6 +28,10 @@ func TestLeadAndChatAPI(t *testing.T) {
 	if err != nil {
 		t.Fatalf("init lead store: %v", err)
 	}
+	leadTimelineStore, err := storage.NewFileLeadTimelineStore(filepath.Join(tmpDir, "lead_timelines.json"))
+	if err != nil {
+		t.Fatalf("init lead timeline store: %v", err)
+	}
 	statsService := stats.NewService(leadStore)
 	reminderService := reminder.NewService(leadStore)
 	heartbeatService, err := heartbeat.NewService(heartbeat.Config{
@@ -40,7 +44,7 @@ func TestLeadAndChatAPI(t *testing.T) {
 	}
 	_ = heartbeatService.RunOnce(time.Now().UTC())
 
-	router := NewRouter(leadStore, &stubAgentRuntime{}, statsService, reminderService, heartbeatService, calendar.NewService(leadStore))
+	router := NewRouter(leadStore, leadTimelineStore, &stubAgentRuntime{}, statsService, reminderService, heartbeatService, calendar.NewService(leadStore))
 
 	resp := doJSONRequest(t, router, http.MethodGet, "/api/leads", nil)
 	if resp.Code != http.StatusOK {
@@ -149,9 +153,57 @@ func TestLeadAndChatAPI(t *testing.T) {
 		t.Fatalf("expected location updated via patch, got %q", updatePayload.Data.Location)
 	}
 
+	resp = doJSONRequest(t, router, http.MethodGet, "/api/lead-timelines", nil)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("GET /api/lead-timelines status=%d body=%s", resp.Code, resp.Body.String())
+	}
+
+	var timelineListPayload struct {
+		Data []model.LeadTimeline `json:"data"`
+	}
+	decodeJSONBody(t, resp, &timelineListPayload)
+	if len(timelineListPayload.Data) == 0 {
+		t.Fatal("expected at least one timeline item")
+	}
+	var tracked model.LeadTimeline
+	foundTimeline := false
+	for _, item := range timelineListPayload.Data {
+		if item.LeadID == leadID {
+			tracked = item
+			foundTimeline = true
+			break
+		}
+	}
+	if !foundTimeline {
+		t.Fatalf("expected timeline exists for lead %q", leadID)
+	}
+	if len(tracked.Stages) < 2 {
+		t.Fatalf("expected at least 2 stages tracked, got %d", len(tracked.Stages))
+	}
+	if tracked.Stages[0].Stage != "new" {
+		t.Fatalf("expected first stage new, got %q", tracked.Stages[0].Stage)
+	}
+	if tracked.Stages[0].EndedAt == "" {
+		t.Fatalf("expected first stage ended_at recorded, got empty")
+	}
+	if tracked.Stages[len(tracked.Stages)-1].Stage != "interviewing" {
+		t.Fatalf("expected latest stage interviewing, got %q", tracked.Stages[len(tracked.Stages)-1].Stage)
+	}
+
 	resp = doJSONRequest(t, router, http.MethodDelete, "/api/leads/"+leadID, nil)
 	if resp.Code != http.StatusNoContent {
 		t.Fatalf("DELETE /api/leads/:id status=%d body=%s", resp.Code, resp.Body.String())
+	}
+
+	resp = doJSONRequest(t, router, http.MethodGet, "/api/lead-timelines", nil)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("GET /api/lead-timelines after lead delete status=%d body=%s", resp.Code, resp.Body.String())
+	}
+	decodeJSONBody(t, resp, &timelineListPayload)
+	for _, item := range timelineListPayload.Data {
+		if item.LeadID == leadID {
+			t.Fatalf("expected timeline deleted with lead, got lead_id=%q", item.LeadID)
+		}
 	}
 
 	resp = doJSONRequest(t, router, http.MethodGet, "/api/leads", nil)

@@ -207,9 +207,91 @@ func TestServiceRepositoryUnavailable(t *testing.T) {
 	}
 }
 
+func TestServiceStatusObserver(t *testing.T) {
+	t.Parallel()
+
+	repo := &stubRepository{}
+	observer := &stubStatusObserver{}
+	service := NewService(repo).WithStatusObserver(observer)
+
+	created, err := service.Create(model.LeadMutationInput{
+		Company:  "OpenAI",
+		Position: "Backend Engineer",
+		Status:   "new",
+	})
+	if err != nil {
+		t.Fatalf("create lead error: %v", err)
+	}
+
+	if observer.createdCount != 1 {
+		t.Fatalf("expected created callback once, got %d", observer.createdCount)
+	}
+	if observer.lastCreated.ID != created.ID {
+		t.Fatalf("expected created callback lead id %q, got %q", created.ID, observer.lastCreated.ID)
+	}
+
+	updated, found, err := service.Update(created.ID, model.LeadMutationInput{
+		Company:  "OpenAI",
+		Position: "Backend Engineer",
+		Status:   "interviewing",
+	})
+	if err != nil {
+		t.Fatalf("update lead error: %v", err)
+	}
+	if !found {
+		t.Fatal("expected lead found on update")
+	}
+	if observer.updatedCount != 1 {
+		t.Fatalf("expected updated callback once, got %d", observer.updatedCount)
+	}
+	if observer.lastAfter.ID != updated.ID {
+		t.Fatalf("expected updated callback after id %q, got %q", updated.ID, observer.lastAfter.ID)
+	}
+
+	deleted, err := service.Delete(created.ID)
+	if err != nil {
+		t.Fatalf("delete lead error: %v", err)
+	}
+	if !deleted {
+		t.Fatal("expected delete success")
+	}
+	if observer.deletedCount != 1 {
+		t.Fatalf("expected deleted callback once, got %d", observer.deletedCount)
+	}
+	if observer.lastDeletedID != created.ID {
+		t.Fatalf("expected deleted callback id %q, got %q", created.ID, observer.lastDeletedID)
+	}
+}
+
 type stubRepository struct {
 	items []model.Lead
 	next  int
+}
+
+type stubStatusObserver struct {
+	createdCount  int
+	updatedCount  int
+	deletedCount  int
+	lastCreated   model.Lead
+	lastBefore    model.Lead
+	lastAfter     model.Lead
+	lastDeletedID string
+}
+
+func (s *stubStatusObserver) OnLeadCreated(lead model.Lead) {
+	s.createdCount++
+	s.lastCreated = lead
+}
+
+func (s *stubStatusObserver) OnLeadUpdated(before model.Lead, after model.Lead) {
+	s.updatedCount++
+	s.lastBefore = before
+	s.lastAfter = after
+}
+
+func (s *stubStatusObserver) OnLeadDeleted(leadID string) {
+	s.deletedCount++
+	s.lastDeletedID = leadID
 }
 
 func (s *stubRepository) List() []model.Lead {
