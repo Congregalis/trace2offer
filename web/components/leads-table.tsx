@@ -63,6 +63,7 @@ const EMPTY_NEW_LEAD: LeadMutationInput = {
   priority: 0,
   nextAction: "",
   nextActionAt: "",
+  interviewAt: "",
   reminderMethods: ["in_app"],
   notes: "",
   companyWebsiteUrl: "",
@@ -85,6 +86,7 @@ function toMutationInput(lead: Lead): LeadMutationInput {
     priority: lead.priority,
     nextAction: lead.nextAction,
     nextActionAt: lead.nextActionAt,
+    interviewAt: lead.interviewAt,
     reminderMethods: [...lead.reminderMethods],
     notes: lead.notes,
     companyWebsiteUrl: lead.companyWebsiteUrl,
@@ -577,7 +579,7 @@ export function LeadsTable() {
                   placeholder="https://..."
                 />
               </Field>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <Field>
                   <FieldLabel>下一步动作</FieldLabel>
                   <Input
@@ -595,6 +597,19 @@ export function LeadsTable() {
                       setEditingLead({
                         ...editingLead,
                         nextActionAt: fromDateTimeLocalValue(e.target.value),
+                      })
+                    }
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel>面试时间</FieldLabel>
+                  <Input
+                    type="datetime-local"
+                    value={toDateTimeLocalValue(editingLead.interviewAt)}
+                    onChange={(e) =>
+                      setEditingLead({
+                        ...editingLead,
+                        interviewAt: fromDateTimeLocalValue(e.target.value),
                       })
                     }
                   />
@@ -722,7 +737,7 @@ export function LeadsTable() {
                 placeholder="https://..."
               />
             </Field>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <Field>
                 <FieldLabel>下一步动作</FieldLabel>
                 <Input
@@ -737,6 +752,14 @@ export function LeadsTable() {
                   type="datetime-local"
                   value={toDateTimeLocalValue(newLead.nextActionAt)}
                   onChange={(e) => setNewLead({ ...newLead, nextActionAt: fromDateTimeLocalValue(e.target.value) })}
+                />
+              </Field>
+              <Field>
+                <FieldLabel>面试时间</FieldLabel>
+                <Input
+                  type="datetime-local"
+                  value={toDateTimeLocalValue(newLead.interviewAt)}
+                  onChange={(e) => setNewLead({ ...newLead, interviewAt: fromDateTimeLocalValue(e.target.value) })}
                 />
               </Field>
             </div>

@@ -14,6 +14,7 @@ interface APILead {
   priority?: number;
   next_action?: string;
   next_action_at?: string;
+  interview_at?: string;
   reminder_methods?: string[];
   notes?: string;
   company_website_url?: string;
@@ -142,6 +143,7 @@ function normalizeLead(apiLead: APILead): Lead {
     priority: parsePriority(apiLead.priority),
     nextAction: (apiLead.next_action || "").trim(),
     nextActionAt: normalizeDateTime(apiLead.next_action_at || ""),
+    interviewAt: normalizeDateTime(apiLead.interview_at || ""),
     reminderMethods: normalizeReminderMethods(apiLead.reminder_methods),
     notes: (apiLead.notes || "").trim(),
     companyWebsiteUrl: (apiLead.company_website_url || "").trim(),
@@ -161,6 +163,7 @@ function toMutationPayload(input: LeadMutationInput): Record<string, unknown> {
     priority: parsePriority(input.priority),
     next_action: input.nextAction.trim(),
     next_action_at: normalizeDateTime(input.nextActionAt),
+    interview_at: normalizeDateTime(input.interviewAt),
     reminder_methods: normalizeReminderMethods(input.reminderMethods),
     notes: input.notes.trim(),
     company_website_url: input.companyWebsiteUrl.trim(),
@@ -178,6 +181,7 @@ function toMutationInput(lead: Lead): LeadMutationInput {
     priority: lead.priority,
     nextAction: lead.nextAction,
     nextActionAt: lead.nextActionAt,
+    interviewAt: lead.interviewAt,
     reminderMethods: [...lead.reminderMethods],
     notes: lead.notes,
     companyWebsiteUrl: lead.companyWebsiteUrl,

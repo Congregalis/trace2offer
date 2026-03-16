@@ -10,6 +10,7 @@ type Lead struct {
 	Priority          int      `json:"priority"`
 	NextAction        string   `json:"next_action"`
 	NextActionAt      string   `json:"next_action_at,omitempty"`
+	InterviewAt       string   `json:"interview_at,omitempty"`
 	ReminderMethods   []string `json:"reminder_methods,omitempty"`
 	Notes             string   `json:"notes"`
 	CompanyWebsiteURL string   `json:"company_website_url"`
@@ -28,6 +29,7 @@ type LeadMutationInput struct {
 	Priority          int      `json:"priority"`
 	NextAction        string   `json:"next_action"`
 	NextActionAt      string   `json:"next_action_at"`
+	InterviewAt       string   `json:"interview_at"`
 	ReminderMethods   []string `json:"reminder_methods"`
 	Notes             string   `json:"notes"`
 	CompanyWebsiteURL string   `json:"company_website_url"`

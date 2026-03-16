@@ -32,8 +32,10 @@ type Item struct {
 
 // Service calculates reminder items from lead data.
 type Service struct {
-	repo LeadRepository
-	now  func() time.Time
+	repo              LeadRepository
+	now               func() time.Time
+	overdueDays       int
+	priorityThreshold int
 }
 
 func NewService(repo LeadRepository) *Service {
@@ -42,6 +44,8 @@ func NewService(repo LeadRepository) *Service {
 		now: func() time.Time {
 			return time.Now().UTC()
 		},
+		overdueDays:       3,
+		priorityThreshold: 4,
 	}
 }
 
@@ -62,37 +66,15 @@ func (s *Service) GetDueAt(now time.Time) []Item {
 	}
 
 	leads := s.repo.List()
-	items := make([]Item, 0, len(leads))
+	items := make([]Item, 0, len(leads)*2)
 	for _, lead := range leads {
-		if strings.TrimSpace(lead.NextActionAt) == "" {
-			continue
-		}
 		if !isActiveLeadStatus(lead.Status) {
 			continue
 		}
-
-		dueAt, ok := parseRFC3339(lead.NextActionAt)
-		if !ok {
-			continue
-		}
-		if dueAt.After(now) {
-			continue
-		}
-
 		methods := normalizeReminderMethods(lead.ReminderMethods)
-		items = append(items, Item{
-			ID:         buildReminderID("next_action", lead.ID, dueAt),
-			LeadID:     strings.TrimSpace(lead.ID),
-			Type:       "next_action_due",
-			Title:      fmt.Sprintf("%s - %s 到期提醒", strings.TrimSpace(lead.Company), strings.TrimSpace(lead.Position)),
-			Message:    buildNextActionMessage(lead),
-			DueAt:      dueAt.Format(time.RFC3339),
-			Severity:   "warning",
-			Methods:    methods,
-			Company:    strings.TrimSpace(lead.Company),
-			Position:   strings.TrimSpace(lead.Position),
-			NextAction: strings.TrimSpace(lead.NextAction),
-		})
+		items = append(items, s.buildNextActionReminder(lead, now, methods)...)
+		items = append(items, s.buildHighPriorityOverdueReminder(lead, now, methods)...)
+		items = append(items, s.buildInterviewReminder(lead, now, methods)...)
 	}
 
 	sort.Slice(items, func(i, j int) bool {
@@ -105,6 +87,95 @@ func (s *Service) GetDueAt(now time.Time) []Item {
 	})
 
 	return items
+}
+
+func (s *Service) buildNextActionReminder(lead model.Lead, now time.Time, methods []string) []Item {
+	if strings.TrimSpace(lead.NextActionAt) == "" {
+		return nil
+	}
+	dueAt, ok := parseRFC3339(lead.NextActionAt)
+	if !ok || dueAt.After(now) {
+		return nil
+	}
+
+	return []Item{{
+		ID:         buildReminderID("next_action", lead.ID, dueAt),
+		LeadID:     strings.TrimSpace(lead.ID),
+		Type:       "next_action_due",
+		Title:      fmt.Sprintf("%s - %s 到期提醒", strings.TrimSpace(lead.Company), strings.TrimSpace(lead.Position)),
+		Message:    buildNextActionMessage(lead),
+		DueAt:      dueAt.Format(time.RFC3339),
+		Severity:   "warning",
+		Methods:    methods,
+		Company:    strings.TrimSpace(lead.Company),
+		Position:   strings.TrimSpace(lead.Position),
+		NextAction: strings.TrimSpace(lead.NextAction),
+	}}
+}
+
+func (s *Service) buildHighPriorityOverdueReminder(lead model.Lead, now time.Time, methods []string) []Item {
+	if lead.Priority < s.priorityThreshold || s.overdueDays <= 0 {
+		return nil
+	}
+
+	updatedAt, ok := parseRFC3339(lead.UpdatedAt)
+	if !ok {
+		updatedAt, ok = parseRFC3339(lead.CreatedAt)
+	}
+	if !ok {
+		return nil
+	}
+
+	threshold := updatedAt.Add(time.Duration(s.overdueDays) * 24 * time.Hour)
+	if threshold.After(now) {
+		return nil
+	}
+
+	return []Item{{
+		ID:         buildReminderID("high_priority_overdue", lead.ID, threshold),
+		LeadID:     strings.TrimSpace(lead.ID),
+		Type:       "high_priority_overdue",
+		Title:      fmt.Sprintf("%s - %s 逾期预警", strings.TrimSpace(lead.Company), strings.TrimSpace(lead.Position)),
+		Message:    fmt.Sprintf("高优先级线索已超过 %d 天未更新，建议立即跟进。", s.overdueDays),
+		DueAt:      threshold.Format(time.RFC3339),
+		Severity:   "critical",
+		Methods:    methods,
+		Company:    strings.TrimSpace(lead.Company),
+		Position:   strings.TrimSpace(lead.Position),
+		NextAction: strings.TrimSpace(lead.NextAction),
+	}}
+}
+
+func (s *Service) buildInterviewReminder(lead model.Lead, now time.Time, methods []string) []Item {
+	if strings.TrimSpace(lead.InterviewAt) == "" {
+		return nil
+	}
+	interviewAt, ok := parseRFC3339(lead.InterviewAt)
+	if !ok {
+		return nil
+	}
+
+	alertAt := interviewAt.Add(-24 * time.Hour)
+	if alertAt.After(now) {
+		return nil
+	}
+	if now.After(interviewAt.Add(2 * time.Hour)) {
+		return nil
+	}
+
+	return []Item{{
+		ID:         buildReminderID("interview_24h", lead.ID, alertAt),
+		LeadID:     strings.TrimSpace(lead.ID),
+		Type:       "interview_24h",
+		Title:      fmt.Sprintf("%s - %s 面试前 24 小时提醒", strings.TrimSpace(lead.Company), strings.TrimSpace(lead.Position)),
+		Message:    fmt.Sprintf("面试时间：%s，请提前确认材料与时间安排。", interviewAt.Format("2006-01-02 15:04 MST")),
+		DueAt:      alertAt.Format(time.RFC3339),
+		Severity:   "warning",
+		Methods:    methods,
+		Company:    strings.TrimSpace(lead.Company),
+		Position:   strings.TrimSpace(lead.Position),
+		NextAction: strings.TrimSpace(lead.NextAction),
+	}}
 }
 
 func buildNextActionMessage(lead model.Lead) string {

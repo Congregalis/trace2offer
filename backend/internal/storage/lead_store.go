@@ -81,6 +81,7 @@ func (s *FileLeadStore) Create(input model.LeadMutationInput) (model.Lead, error
 		Priority:          input.Priority,
 		NextAction:        input.NextAction,
 		NextActionAt:      input.NextActionAt,
+		InterviewAt:       input.InterviewAt,
 		ReminderMethods:   append([]string(nil), input.ReminderMethods...),
 		Notes:             input.Notes,
 		CompanyWebsiteURL: input.CompanyWebsiteURL,
@@ -115,6 +116,7 @@ func (s *FileLeadStore) Update(id string, input model.LeadMutationInput) (model.
 		updated.Priority = input.Priority
 		updated.NextAction = input.NextAction
 		updated.NextActionAt = input.NextActionAt
+		updated.InterviewAt = input.InterviewAt
 		updated.ReminderMethods = append([]string(nil), input.ReminderMethods...)
 		updated.Notes = input.Notes
 		updated.CompanyWebsiteURL = input.CompanyWebsiteURL
@@ -244,6 +246,7 @@ func seedLeads() []model.Lead {
 			Priority:          5,
 			NextAction:        "准备系统设计面试",
 			NextActionAt:      now.Add(18 * time.Hour).Format(time.RFC3339),
+			InterviewAt:       now.Add(42 * time.Hour).Format(time.RFC3339),
 			ReminderMethods:   []string{"in_app", "web_push"},
 			Notes:             "JD 强调分布式系统经验",
 			CompanyWebsiteURL: "https://www.datadoghq.com",

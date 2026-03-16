@@ -225,6 +225,7 @@ func mutationInputSchema(required []string) map[string]any {
 			"priority":       map[string]any{"type": "integer"},
 			"next_action":    map[string]any{"type": "string"},
 			"next_action_at": map[string]any{"type": "string"},
+			"interview_at":   map[string]any{"type": "string"},
 			"reminder_methods": map[string]any{
 				"type":  "array",
 				"items": map[string]any{"type": "string"},

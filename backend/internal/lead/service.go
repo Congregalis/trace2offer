@@ -202,6 +202,7 @@ func NormalizeMutationInput(input model.LeadMutationInput) (model.LeadMutationIn
 	input.Status = strings.TrimSpace(input.Status)
 	input.NextAction = strings.TrimSpace(input.NextAction)
 	input.NextActionAt = strings.TrimSpace(input.NextActionAt)
+	input.InterviewAt = strings.TrimSpace(input.InterviewAt)
 	input.Notes = strings.TrimSpace(input.Notes)
 	input.CompanyWebsiteURL = strings.TrimSpace(input.CompanyWebsiteURL)
 	input.JDURL = strings.TrimSpace(input.JDURL)
@@ -233,6 +234,16 @@ func NormalizeMutationInput(input model.LeadMutationInput) (model.LeadMutationIn
 			}
 		}
 		input.NextActionAt = normalizedAt
+	}
+	if input.InterviewAt != "" {
+		normalizedAt, ok := normalizeRFC3339Time(input.InterviewAt)
+		if !ok {
+			return model.LeadMutationInput{}, &ValidationError{
+				Field:   "interview_at",
+				Message: "interview_at is invalid, expected RFC3339 datetime",
+			}
+		}
+		input.InterviewAt = normalizedAt
 	}
 
 	methods, err := normalizeReminderMethods(input.ReminderMethods)

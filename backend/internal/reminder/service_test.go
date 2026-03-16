@@ -49,6 +49,61 @@ func TestServiceGetDueByNextActionAt(t *testing.T) {
 	}
 }
 
+func TestServiceHighPriorityOverdueReminder(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 3, 16, 12, 0, 0, 0, time.UTC)
+	service := NewService(&stubLeadRepo{
+		leads: []model.Lead{
+			{
+				ID:              "lead_overdue",
+				Company:         "Datadog",
+				Position:        "Platform Engineer",
+				Status:          "interviewing",
+				Priority:        5,
+				UpdatedAt:       now.Add(-96 * time.Hour).Format(time.RFC3339),
+				ReminderMethods: []string{"in_app"},
+			},
+		},
+	})
+	service.now = func() time.Time { return now }
+
+	items := service.GetDue()
+	if len(items) != 1 {
+		t.Fatalf("expected 1 overdue reminder, got %d", len(items))
+	}
+	if items[0].Type != "high_priority_overdue" {
+		t.Fatalf("expected high_priority_overdue, got %q", items[0].Type)
+	}
+}
+
+func TestServiceInterview24HourReminder(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 3, 16, 12, 0, 0, 0, time.UTC)
+	service := NewService(&stubLeadRepo{
+		leads: []model.Lead{
+			{
+				ID:              "lead_interview",
+				Company:         "Stripe",
+				Position:        "Backend Engineer",
+				Status:          "interviewing",
+				InterviewAt:     now.Add(23 * time.Hour).Format(time.RFC3339),
+				ReminderMethods: []string{"web_push", "in_app"},
+			},
+		},
+	})
+	service.now = func() time.Time { return now }
+
+	items := service.GetDue()
+	if len(items) != 1 {
+		t.Fatalf("expected 1 interview reminder, got %d", len(items))
+	}
+	if items[0].Type != "interview_24h" {
+		t.Fatalf("expected interview_24h, got %q", items[0].Type)
+	}
+}
+
 type stubLeadRepo struct {
 	leads []model.Lead
 }

@@ -19,6 +19,7 @@ export interface Lead {
   priority: number;
   nextAction: string;
   nextActionAt: string;
+  interviewAt: string;
   reminderMethods: ReminderMethod[];
   notes: string;
   companyWebsiteUrl: string;
@@ -36,6 +37,7 @@ export interface LeadMutationInput {
   priority: number;
   nextAction: string;
   nextActionAt: string;
+  interviewAt: string;
   reminderMethods: ReminderMethod[];
   notes: string;
   companyWebsiteUrl: string;
