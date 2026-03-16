@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	agentruntime "trace2offer/backend/agent"
+	"trace2offer/backend/internal/heartbeat"
 	"trace2offer/backend/internal/lead"
 	"trace2offer/backend/internal/model"
 	"trace2offer/backend/internal/reminder"
@@ -34,9 +35,10 @@ type handler struct {
 	agentRuntime AgentRuntime
 	stats        *stats.Service
 	reminders    *reminder.Service
+	heartbeat    *heartbeat.Service
 }
 
-func NewRouter(leads storage.LeadStore, runtime AgentRuntime, statsService *stats.Service, reminderService *reminder.Service) *gin.Engine {
+func NewRouter(leads storage.LeadStore, runtime AgentRuntime, statsService *stats.Service, reminderService *reminder.Service, heartbeatService *heartbeat.Service) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery(), corsMiddleware())
 
@@ -45,6 +47,7 @@ func NewRouter(leads storage.LeadStore, runtime AgentRuntime, statsService *stat
 		agentRuntime: runtime,
 		stats:        statsService,
 		reminders:    reminderService,
+		heartbeat:    heartbeatService,
 	}
 
 	r.GET("/health", func(c *gin.Context) {
@@ -84,6 +87,10 @@ func NewRouter(leads storage.LeadStore, runtime AgentRuntime, statsService *stat
 
 		reminders := api.Group("/reminders")
 		reminders.GET("/due", h.getDueReminders)
+
+		heartbeat := api.Group("/heartbeat")
+		heartbeat.GET("/status", h.getHeartbeatStatus)
+		heartbeat.GET("/reports/latest", h.getHeartbeatReportsLatest)
 	}
 
 	return r
@@ -392,6 +399,28 @@ func (h *handler) getDueReminders(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"data": h.reminders.GetDue()})
+}
+
+func (h *handler) getHeartbeatStatus(c *gin.Context) {
+	if h.heartbeat == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "heartbeat service is not configured"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": h.heartbeat.GetStatus()})
+}
+
+func (h *handler) getHeartbeatReportsLatest(c *gin.Context) {
+	if h.heartbeat == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "heartbeat service is not configured"})
+		return
+	}
+
+	reports, err := h.heartbeat.GetLatestReports()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "load heartbeat reports failed", "error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": reports})
 }
 
 func (h *handler) importUserProfile(c *gin.Context) {

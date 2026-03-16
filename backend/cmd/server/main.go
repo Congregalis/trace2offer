@@ -1,16 +1,19 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"trace2offer/backend/agent"
 	"trace2offer/backend/internal/api"
 	appconfig "trace2offer/backend/internal/config"
+	"trace2offer/backend/internal/heartbeat"
 	"trace2offer/backend/internal/lead"
 	"trace2offer/backend/internal/reminder"
 	"trace2offer/backend/internal/stats"
@@ -39,6 +42,15 @@ func main() {
 	}
 	statsService := stats.NewService(leadStore)
 	reminderService := reminder.NewService(leadStore)
+	heartbeatService, err := heartbeat.NewService(heartbeat.Config{
+		DataDir:         dataDir,
+		Interval:        30 * time.Minute,
+		ReminderService: reminderService,
+		StatsService:    statsService,
+	})
+	if err != nil {
+		log.Fatalf("init heartbeat service failed: %v", err)
+	}
 
 	maxSteps, err := getenvInt("T2O_AGENT_MAX_STEPS", 6)
 	if err != nil {
@@ -69,7 +81,9 @@ func main() {
 		log.Fatalf("init agent runtime failed: %v", err)
 	}
 
-	router := api.NewRouter(leadStore, runtime, statsService, reminderService)
+	go heartbeatService.Start(context.Background())
+
+	router := api.NewRouter(leadStore, runtime, statsService, reminderService, heartbeatService)
 	addr := ":" + port
 	log.Printf("trace2offer backend listening on %s", addr)
 	if err := router.Run(addr); err != nil {

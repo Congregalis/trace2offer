@@ -12,6 +12,7 @@ import (
 	"time"
 
 	agentruntime "trace2offer/backend/agent"
+	"trace2offer/backend/internal/heartbeat"
 	"trace2offer/backend/internal/model"
 	"trace2offer/backend/internal/reminder"
 	"trace2offer/backend/internal/stats"
@@ -26,7 +27,19 @@ func TestLeadAndChatAPI(t *testing.T) {
 	if err != nil {
 		t.Fatalf("init lead store: %v", err)
 	}
-	router := NewRouter(leadStore, &stubAgentRuntime{}, stats.NewService(leadStore), reminder.NewService(leadStore))
+	statsService := stats.NewService(leadStore)
+	reminderService := reminder.NewService(leadStore)
+	heartbeatService, err := heartbeat.NewService(heartbeat.Config{
+		DataDir:         tmpDir,
+		ReminderService: reminderService,
+		StatsService:    statsService,
+	})
+	if err != nil {
+		t.Fatalf("init heartbeat service: %v", err)
+	}
+	_ = heartbeatService.RunOnce(time.Now().UTC())
+
+	router := NewRouter(leadStore, &stubAgentRuntime{}, statsService, reminderService, heartbeatService)
 
 	resp := doJSONRequest(t, router, http.MethodGet, "/api/leads", nil)
 	if resp.Code != http.StatusOK {
@@ -300,6 +313,16 @@ func TestLeadAndChatAPI(t *testing.T) {
 	resp = doJSONRequest(t, router, http.MethodGet, "/api/reminders/due", nil)
 	if resp.Code != http.StatusOK {
 		t.Fatalf("GET /api/reminders/due status=%d body=%s", resp.Code, resp.Body.String())
+	}
+
+	resp = doJSONRequest(t, router, http.MethodGet, "/api/heartbeat/status", nil)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("GET /api/heartbeat/status status=%d body=%s", resp.Code, resp.Body.String())
+	}
+
+	resp = doJSONRequest(t, router, http.MethodGet, "/api/heartbeat/reports/latest", nil)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("GET /api/heartbeat/reports/latest status=%d body=%s", resp.Code, resp.Body.String())
 	}
 }
 
