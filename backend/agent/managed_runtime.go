@@ -9,6 +9,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"trace2offer/backend/agent/tool"
 	"trace2offer/backend/internal/lead"
 )
 
@@ -21,6 +22,7 @@ type ManagedRuntimeConfig struct {
 	MemoryDataPath      string
 	UserProfileDataPath string
 	LeadManager         lead.Manager
+	StatsProvider       tool.StatsSummaryProvider
 	Defaults            RuntimeSettings
 }
 
@@ -35,6 +37,7 @@ type ManagedRuntime struct {
 	sessionDataPath string
 	memoryDataPath  string
 	leadManager     lead.Manager
+	statsProvider   tool.StatsSummaryProvider
 }
 
 func NewManagedRuntime(config ManagedRuntimeConfig) (*ManagedRuntime, error) {
@@ -79,6 +82,7 @@ func NewManagedRuntime(config ManagedRuntimeConfig) (*ManagedRuntime, error) {
 		sessionDataPath: config.SessionDataPath,
 		memoryDataPath:  config.MemoryDataPath,
 		leadManager:     config.LeadManager,
+		statsProvider:   config.StatsProvider,
 		userProfiles:    profileManager,
 	}
 
@@ -254,6 +258,7 @@ func (m *ManagedRuntime) buildRuntime(settings RuntimeSettings) (*Runtime, error
 		SessionDataPath: m.sessionDataPath,
 		MemoryDataPath:  m.memoryDataPath,
 		LeadManager:     m.leadManager,
+		StatsProvider:   m.statsProvider,
 		AgentConfig: Config{
 			Model:        settings.Model,
 			MaxSteps:     settings.MaxSteps,

@@ -27,6 +27,7 @@ func DefaultConfig() Config {
 		SystemPrompt: "你是 Trace2Offer 的求职 Agent。\n" +
 			"目标：高质量完成用户请求，必要时调用工具，别编造。\n" +
 			"当用户提供 JD 链接时，优先调用 lead_create_from_jd_url。\n" +
+			"当用户询问求职进展分析、下一步建议、策略优化时，优先调用 stats_summary 或 job_search_strategy。\n" +
 			"每一步只能做一个动作。",
 	}
 }

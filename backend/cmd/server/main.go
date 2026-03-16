@@ -36,6 +36,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("init lead store failed: %v", err)
 	}
+	statsService := stats.NewService(leadStore)
 
 	maxSteps, err := getenvInt("T2O_AGENT_MAX_STEPS", 6)
 	if err != nil {
@@ -52,6 +53,7 @@ func main() {
 		MemoryDataPath:      getenv("T2O_AGENT_MEMORY_DATA", filepath.Join(dataDir, "agent_memory.json")),
 		UserProfileDataPath: getenv("T2O_AGENT_USER_PROFILE_DATA", filepath.Join(dataDir, "user_profile.json")),
 		LeadManager:         lead.NewService(leadStore),
+		StatsProvider:       statsService,
 		Defaults: agent.RuntimeSettings{
 			Model:                model,
 			MaxSteps:             maxSteps,
@@ -64,9 +66,6 @@ func main() {
 	if err != nil {
 		log.Fatalf("init agent runtime failed: %v", err)
 	}
-
-	// Initialize stats service
-	statsService := stats.NewService(leadStore)
 
 	router := api.NewRouter(leadStore, runtime, statsService)
 	addr := ":" + port

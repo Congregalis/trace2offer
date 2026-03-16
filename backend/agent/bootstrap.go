@@ -18,6 +18,7 @@ type BootstrapConfig struct {
 	SessionDataPath string
 	MemoryDataPath  string
 	LeadManager     lead.Manager
+	StatsProvider   tool.StatsSummaryProvider
 	UserProfiles    *UserProfileManager
 	AgentConfig     Config
 	OpenAIAPIKey    string
@@ -68,7 +69,10 @@ func NewDefaultRuntime(config BootstrapConfig) (*Runtime, error) {
 
 	extractor := tool.NewLLMJDExtractor(modelProvider, strings.TrimSpace(config.OpenAIModel))
 	leadTools := tool.NewLeadCRUDTools(config.LeadManager, tool.WithJDExtractor(extractor))
-	registry, err := tool.NewRegistry(leadTools...)
+	allTools := make([]tool.Tool, 0, len(leadTools)+2)
+	allTools = append(allTools, leadTools...)
+	allTools = append(allTools, tool.NewInsightTools(config.StatsProvider)...)
+	registry, err := tool.NewRegistry(allTools...)
 	if err != nil {
 		return nil, err
 	}
