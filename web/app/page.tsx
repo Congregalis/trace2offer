@@ -1,5 +1,6 @@
 import { Nav } from "@/components/nav";
 import { LeadsTable } from "@/components/leads-table";
+import { ReminderCenter } from "@/components/reminder-center";
 import { StatsCards } from "@/components/stats-cards";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -15,6 +16,7 @@ export default function HomePage() {
               集中管理你的求职线索和跟进状态
             </p>
           </div>
+          <ReminderCenter />
 
           <Tabs defaultValue="leads" className="space-y-4">
             <TabsList className="h-10">

@@ -13,6 +13,7 @@ import (
 
 	agentruntime "trace2offer/backend/agent"
 	"trace2offer/backend/internal/model"
+	"trace2offer/backend/internal/reminder"
 	"trace2offer/backend/internal/stats"
 	"trace2offer/backend/internal/storage"
 )
@@ -25,7 +26,7 @@ func TestLeadAndChatAPI(t *testing.T) {
 	if err != nil {
 		t.Fatalf("init lead store: %v", err)
 	}
-	router := NewRouter(leadStore, &stubAgentRuntime{}, stats.NewService(leadStore))
+	router := NewRouter(leadStore, &stubAgentRuntime{}, stats.NewService(leadStore), reminder.NewService(leadStore))
 
 	resp := doJSONRequest(t, router, http.MethodGet, "/api/leads", nil)
 	if resp.Code != http.StatusOK {
@@ -294,6 +295,11 @@ func TestLeadAndChatAPI(t *testing.T) {
 	resp = doJSONRequest(t, router, http.MethodGet, "/api/stats/", nil)
 	if resp.Code != http.StatusOK {
 		t.Fatalf("GET /api/stats/ status=%d body=%s", resp.Code, resp.Body.String())
+	}
+
+	resp = doJSONRequest(t, router, http.MethodGet, "/api/reminders/due", nil)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("GET /api/reminders/due status=%d body=%s", resp.Code, resp.Body.String())
 	}
 }
 

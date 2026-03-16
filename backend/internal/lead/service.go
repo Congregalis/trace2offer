@@ -3,6 +3,7 @@ package lead
 import (
 	"errors"
 	"strings"
+	"time"
 
 	"trace2offer/backend/internal/model"
 )
@@ -20,7 +21,14 @@ const (
 	StatusArchived     = "archived"
 )
 
+const (
+	ReminderMethodInApp   = "in_app"
+	ReminderMethodEmail   = "email"
+	ReminderMethodWebPush = "web_push"
+)
+
 const DefaultLeadStatus = StatusNew
+const DefaultReminderMethod = ReminderMethodInApp
 
 var canonicalLeadStatuses = []string{
 	StatusNew,
@@ -33,6 +41,12 @@ var canonicalLeadStatuses = []string{
 	StatusArchived,
 }
 
+var canonicalReminderMethods = []string{
+	ReminderMethodInApp,
+	ReminderMethodEmail,
+	ReminderMethodWebPush,
+}
+
 var canonicalLeadStatusSet = map[string]struct{}{
 	StatusNew:          {},
 	StatusPreparing:    {},
@@ -42,6 +56,12 @@ var canonicalLeadStatusSet = map[string]struct{}{
 	StatusDeclined:     {},
 	StatusRejected:     {},
 	StatusArchived:     {},
+}
+
+var canonicalReminderMethodSet = map[string]struct{}{
+	ReminderMethodInApp:   {},
+	ReminderMethodEmail:   {},
+	ReminderMethodWebPush: {},
 }
 
 // Repository defines the persistence behavior needed by lead operations.
@@ -158,6 +178,12 @@ func CanonicalLeadStatuses() []string {
 	return copied
 }
 
+func CanonicalReminderMethods() []string {
+	copied := make([]string, len(canonicalReminderMethods))
+	copy(copied, canonicalReminderMethods)
+	return copied
+}
+
 func NormalizeLeadStatus(raw string) (string, bool) {
 	value := strings.TrimSpace(raw)
 	if value == "" {
@@ -175,6 +201,7 @@ func NormalizeMutationInput(input model.LeadMutationInput) (model.LeadMutationIn
 	input.Source = strings.TrimSpace(input.Source)
 	input.Status = strings.TrimSpace(input.Status)
 	input.NextAction = strings.TrimSpace(input.NextAction)
+	input.NextActionAt = strings.TrimSpace(input.NextActionAt)
 	input.Notes = strings.TrimSpace(input.Notes)
 	input.CompanyWebsiteURL = strings.TrimSpace(input.CompanyWebsiteURL)
 	input.JDURL = strings.TrimSpace(input.JDURL)
@@ -197,6 +224,70 @@ func NormalizeMutationInput(input model.LeadMutationInput) (model.LeadMutationIn
 	if input.Priority < 0 {
 		input.Priority = 0
 	}
+	if input.NextActionAt != "" {
+		normalizedAt, ok := normalizeRFC3339Time(input.NextActionAt)
+		if !ok {
+			return model.LeadMutationInput{}, &ValidationError{
+				Field:   "next_action_at",
+				Message: "next_action_at is invalid, expected RFC3339 datetime",
+			}
+		}
+		input.NextActionAt = normalizedAt
+	}
+
+	methods, err := normalizeReminderMethods(input.ReminderMethods)
+	if err != nil {
+		return model.LeadMutationInput{}, err
+	}
+	input.ReminderMethods = methods
 
 	return input, nil
+}
+
+func normalizeReminderMethods(raw []string) ([]string, error) {
+	if len(raw) == 0 {
+		return []string{DefaultReminderMethod}, nil
+	}
+
+	normalized := make([]string, 0, len(raw))
+	seen := map[string]struct{}{}
+	for _, item := range raw {
+		method := strings.TrimSpace(strings.ToLower(item))
+		if method == "" {
+			continue
+		}
+		if _, ok := canonicalReminderMethodSet[method]; !ok {
+			return nil, &ValidationError{
+				Field:   "reminder_methods",
+				Message: "reminder_methods is invalid, allowed: " + strings.Join(canonicalReminderMethods, ", "),
+			}
+		}
+		if _, exists := seen[method]; exists {
+			continue
+		}
+		seen[method] = struct{}{}
+		normalized = append(normalized, method)
+	}
+
+	if len(normalized) == 0 {
+		return []string{DefaultReminderMethod}, nil
+	}
+	return normalized, nil
+}
+
+func normalizeRFC3339Time(raw string) (string, bool) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return "", false
+	}
+	if parsed, err := time.Parse(time.RFC3339, value); err == nil {
+		return parsed.UTC().Format(time.RFC3339), true
+	}
+	if parsed, err := time.ParseInLocation("2006-01-02T15:04", value, time.Local); err == nil {
+		return parsed.UTC().Format(time.RFC3339), true
+	}
+	if parsed, err := time.ParseInLocation("2006-01-02 15:04", value, time.Local); err == nil {
+		return parsed.UTC().Format(time.RFC3339), true
+	}
+	return "", false
 }

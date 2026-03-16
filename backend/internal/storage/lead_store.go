@@ -80,6 +80,8 @@ func (s *FileLeadStore) Create(input model.LeadMutationInput) (model.Lead, error
 		Status:            input.Status,
 		Priority:          input.Priority,
 		NextAction:        input.NextAction,
+		NextActionAt:      input.NextActionAt,
+		ReminderMethods:   append([]string(nil), input.ReminderMethods...),
 		Notes:             input.Notes,
 		CompanyWebsiteURL: input.CompanyWebsiteURL,
 		JDURL:             input.JDURL,
@@ -112,6 +114,8 @@ func (s *FileLeadStore) Update(id string, input model.LeadMutationInput) (model.
 		updated.Status = input.Status
 		updated.Priority = input.Priority
 		updated.NextAction = input.NextAction
+		updated.NextActionAt = input.NextActionAt
+		updated.ReminderMethods = append([]string(nil), input.ReminderMethods...)
 		updated.Notes = input.Notes
 		updated.CompanyWebsiteURL = input.CompanyWebsiteURL
 		updated.JDURL = input.JDURL
@@ -166,6 +170,11 @@ func (s *FileLeadStore) loadFromDisk() error {
 	if err := json.Unmarshal(data, &leads); err != nil {
 		return fmt.Errorf("decode lead data file: %w", err)
 	}
+	for i := range leads {
+		if len(leads[i].ReminderMethods) == 0 {
+			leads[i].ReminderMethods = []string{"in_app"}
+		}
+	}
 
 	s.leads = leads
 	return nil
@@ -200,6 +209,8 @@ func seedLeads() []model.Lead {
 			Status:            "new",
 			Priority:          5,
 			NextAction:        "完善简历并投递",
+			NextActionAt:      now.Add(36 * time.Hour).Format(time.RFC3339),
+			ReminderMethods:   []string{"in_app", "web_push"},
 			Notes:             "偏好支付基础设施方向",
 			CompanyWebsiteURL: "https://stripe.com",
 			JDURL:             "https://stripe.com/jobs/listing/backend-engineer/0000000",
@@ -215,6 +226,8 @@ func seedLeads() []model.Lead {
 			Status:            "preparing",
 			Priority:          4,
 			NextAction:        "下周二前跟进内推进度",
+			NextActionAt:      now.Add(72 * time.Hour).Format(time.RFC3339),
+			ReminderMethods:   []string{"in_app"},
 			Notes:             "朋友在团队内，可以走 referral",
 			CompanyWebsiteURL: "https://www.figma.com",
 			JDURL:             "https://boards.greenhouse.io/figma/jobs/0000000",
@@ -230,6 +243,8 @@ func seedLeads() []model.Lead {
 			Status:            "interviewing",
 			Priority:          5,
 			NextAction:        "准备系统设计面试",
+			NextActionAt:      now.Add(18 * time.Hour).Format(time.RFC3339),
+			ReminderMethods:   []string{"in_app", "web_push"},
 			Notes:             "JD 强调分布式系统经验",
 			CompanyWebsiteURL: "https://www.datadoghq.com",
 			JDURL:             "https://careers.datadoghq.com/detail/0000000",

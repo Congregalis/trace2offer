@@ -218,12 +218,17 @@ func mutationInputSchema(required []string) map[string]any {
 	return map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"company":             map[string]any{"type": "string"},
-			"position":            map[string]any{"type": "string"},
-			"source":              map[string]any{"type": "string"},
-			"status":              map[string]any{"type": "string"},
-			"priority":            map[string]any{"type": "integer"},
-			"next_action":         map[string]any{"type": "string"},
+			"company":        map[string]any{"type": "string"},
+			"position":       map[string]any{"type": "string"},
+			"source":         map[string]any{"type": "string"},
+			"status":         map[string]any{"type": "string"},
+			"priority":       map[string]any{"type": "integer"},
+			"next_action":    map[string]any{"type": "string"},
+			"next_action_at": map[string]any{"type": "string"},
+			"reminder_methods": map[string]any{
+				"type":  "array",
+				"items": map[string]any{"type": "string"},
+			},
 			"notes":               map[string]any{"type": "string"},
 			"company_website_url": map[string]any{"type": "string"},
 			"jd_url":              map[string]any{"type": "string"},

@@ -1,7 +1,7 @@
 "use client";
 
 import { create } from "zustand";
-import { Lead, LeadMutationInput, LeadStatus } from "./types";
+import { Lead, LeadMutationInput, LeadStatus, ReminderMethod } from "./types";
 
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8080").replace(/\/$/, "");
 
@@ -13,6 +13,8 @@ interface APILead {
   status?: string;
   priority?: number;
   next_action?: string;
+  next_action_at?: string;
+  reminder_methods?: string[];
   notes?: string;
   company_website_url?: string;
   jd_url?: string;
@@ -82,6 +84,8 @@ const statusSet = new Set<LeadStatus>([
   "archived",
 ]);
 
+const reminderMethodSet = new Set<ReminderMethod>(["in_app", "email", "web_push"]);
+
 function normalizeStatus(raw: string | undefined): LeadStatus {
   const canonical = (raw || "").trim() as LeadStatus;
   if (statusSet.has(canonical)) {
@@ -97,6 +101,37 @@ function parsePriority(raw: number | undefined): number {
   return Math.max(0, Math.floor(raw));
 }
 
+function normalizeReminderMethods(raw: string[] | undefined): ReminderMethod[] {
+  if (!Array.isArray(raw) || raw.length === 0) {
+    return ["in_app"];
+  }
+
+  const normalized: ReminderMethod[] = [];
+  const seen = new Set<string>();
+  for (const item of raw) {
+    const method = (item || "").trim() as ReminderMethod;
+    if (!reminderMethodSet.has(method) || seen.has(method)) {
+      continue;
+    }
+    seen.add(method);
+    normalized.push(method);
+  }
+
+  return normalized.length > 0 ? normalized : ["in_app"];
+}
+
+function normalizeDateTime(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+  const timestamp = Date.parse(trimmed);
+  if (Number.isNaN(timestamp)) {
+    return "";
+  }
+  return new Date(timestamp).toISOString();
+}
+
 function normalizeLead(apiLead: APILead): Lead {
   return {
     id: apiLead.id,
@@ -106,6 +141,8 @@ function normalizeLead(apiLead: APILead): Lead {
     status: normalizeStatus(apiLead.status),
     priority: parsePriority(apiLead.priority),
     nextAction: (apiLead.next_action || "").trim(),
+    nextActionAt: normalizeDateTime(apiLead.next_action_at || ""),
+    reminderMethods: normalizeReminderMethods(apiLead.reminder_methods),
     notes: (apiLead.notes || "").trim(),
     companyWebsiteUrl: (apiLead.company_website_url || "").trim(),
     jdUrl: (apiLead.jd_url || "").trim(),
@@ -123,6 +160,8 @@ function toMutationPayload(input: LeadMutationInput): Record<string, unknown> {
     status: input.status,
     priority: parsePriority(input.priority),
     next_action: input.nextAction.trim(),
+    next_action_at: normalizeDateTime(input.nextActionAt),
+    reminder_methods: normalizeReminderMethods(input.reminderMethods),
     notes: input.notes.trim(),
     company_website_url: input.companyWebsiteUrl.trim(),
     jd_url: input.jdUrl.trim(),
@@ -138,6 +177,8 @@ function toMutationInput(lead: Lead): LeadMutationInput {
     status: lead.status,
     priority: lead.priority,
     nextAction: lead.nextAction,
+    nextActionAt: lead.nextActionAt,
+    reminderMethods: [...lead.reminderMethods],
     notes: lead.notes,
     companyWebsiteUrl: lead.companyWebsiteUrl,
     jdUrl: lead.jdUrl,

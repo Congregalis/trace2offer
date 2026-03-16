@@ -12,6 +12,7 @@ import (
 	"trace2offer/backend/internal/api"
 	appconfig "trace2offer/backend/internal/config"
 	"trace2offer/backend/internal/lead"
+	"trace2offer/backend/internal/reminder"
 	"trace2offer/backend/internal/stats"
 	"trace2offer/backend/internal/storage"
 )
@@ -37,6 +38,7 @@ func main() {
 		log.Fatalf("init lead store failed: %v", err)
 	}
 	statsService := stats.NewService(leadStore)
+	reminderService := reminder.NewService(leadStore)
 
 	maxSteps, err := getenvInt("T2O_AGENT_MAX_STEPS", 6)
 	if err != nil {
@@ -67,7 +69,7 @@ func main() {
 		log.Fatalf("init agent runtime failed: %v", err)
 	}
 
-	router := api.NewRouter(leadStore, runtime, statsService)
+	router := api.NewRouter(leadStore, runtime, statsService, reminderService)
 	addr := ":" + port
 	log.Printf("trace2offer backend listening on %s", addr)
 	if err := router.Run(addr); err != nil {

@@ -2,7 +2,7 @@
 
 import { type ComponentType, useEffect, useMemo, useState } from "react";
 import { useLeadsStore } from "@/lib/leads-store";
-import { Lead, LeadMutationInput, LeadStatus, STATUS_CONFIG } from "@/lib/types";
+import { Lead, LeadMutationInput, LeadStatus, ReminderMethod, STATUS_CONFIG } from "@/lib/types";
 import {
   Table,
   TableBody,
@@ -34,6 +34,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { FieldGroup, Field, FieldLabel } from "@/components/ui/field";
 import {
   Archive,
@@ -61,11 +62,19 @@ const EMPTY_NEW_LEAD: LeadMutationInput = {
   source: "",
   priority: 0,
   nextAction: "",
+  nextActionAt: "",
+  reminderMethods: ["in_app"],
   notes: "",
   companyWebsiteUrl: "",
   jdUrl: "",
   location: "",
 };
+
+const REMINDER_METHOD_OPTIONS: Array<{ value: ReminderMethod; label: string; description: string }> = [
+  { value: "in_app", label: "页面内提醒", description: "在页面内提示待跟进事项" },
+  { value: "email", label: "邮件提醒", description: "保留邮件提醒渠道（后续可接入 SMTP）" },
+  { value: "web_push", label: "Web Push/系统通知", description: "通过浏览器系统通知弹窗提醒" },
+];
 
 function toMutationInput(lead: Lead): LeadMutationInput {
   return {
@@ -75,11 +84,48 @@ function toMutationInput(lead: Lead): LeadMutationInput {
     status: lead.status,
     priority: lead.priority,
     nextAction: lead.nextAction,
+    nextActionAt: lead.nextActionAt,
+    reminderMethods: [...lead.reminderMethods],
     notes: lead.notes,
     companyWebsiteUrl: lead.companyWebsiteUrl,
     jdUrl: lead.jdUrl,
     location: lead.location,
   };
+}
+
+function toDateTimeLocalValue(value: string): string {
+  const timestamp = Date.parse(value);
+  if (Number.isNaN(timestamp)) {
+    return "";
+  }
+  const date = new Date(timestamp);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hour = String(date.getHours()).padStart(2, "0");
+  const minute = String(date.getMinutes()).padStart(2, "0");
+  return `${year}-${month}-${day}T${hour}:${minute}`;
+}
+
+function fromDateTimeLocalValue(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) {
+    return "";
+  }
+  return parsed.toISOString();
+}
+
+function toggleReminderMethod(methods: ReminderMethod[], method: ReminderMethod): ReminderMethod[] {
+  const hasMethod = methods.includes(method);
+  if (hasMethod) {
+    const next = methods.filter((item) => item !== method);
+    return next.length > 0 ? next : ["in_app"];
+  }
+  return [...methods, method];
 }
 
 function formatDate(dateString: string) {
@@ -531,6 +577,51 @@ export function LeadsTable() {
                   placeholder="https://..."
                 />
               </Field>
+              <div className="grid grid-cols-2 gap-4">
+                <Field>
+                  <FieldLabel>下一步动作</FieldLabel>
+                  <Input
+                    value={editingLead.nextAction}
+                    onChange={(e) => setEditingLead({ ...editingLead, nextAction: e.target.value })}
+                    placeholder="如：周三前发跟进邮件"
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel>下一步动作时间</FieldLabel>
+                  <Input
+                    type="datetime-local"
+                    value={toDateTimeLocalValue(editingLead.nextActionAt)}
+                    onChange={(e) =>
+                      setEditingLead({
+                        ...editingLead,
+                        nextActionAt: fromDateTimeLocalValue(e.target.value),
+                      })
+                    }
+                  />
+                </Field>
+              </div>
+              <Field>
+                <FieldLabel>提醒方式</FieldLabel>
+                <div className="space-y-2 rounded-md border border-border bg-secondary/30 p-3">
+                  {REMINDER_METHOD_OPTIONS.map((option) => (
+                    <label key={option.value} className="flex items-start gap-2 text-sm">
+                      <Checkbox
+                        checked={editingLead.reminderMethods.includes(option.value)}
+                        onCheckedChange={() =>
+                          setEditingLead({
+                            ...editingLead,
+                            reminderMethods: toggleReminderMethod(editingLead.reminderMethods, option.value),
+                          })
+                        }
+                      />
+                      <span className="space-y-0.5">
+                        <span className="block text-foreground">{option.label}</span>
+                        <span className="block text-xs text-muted-foreground">{option.description}</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </Field>
               <Field>
                 <FieldLabel>备注</FieldLabel>
                 <Textarea
@@ -630,6 +721,46 @@ export function LeadsTable() {
                 onChange={(e) => setNewLead({ ...newLead, jdUrl: e.target.value })}
                 placeholder="https://..."
               />
+            </Field>
+            <div className="grid grid-cols-2 gap-4">
+              <Field>
+                <FieldLabel>下一步动作</FieldLabel>
+                <Input
+                  value={newLead.nextAction}
+                  onChange={(e) => setNewLead({ ...newLead, nextAction: e.target.value })}
+                  placeholder="如：周三前发跟进邮件"
+                />
+              </Field>
+              <Field>
+                <FieldLabel>下一步动作时间</FieldLabel>
+                <Input
+                  type="datetime-local"
+                  value={toDateTimeLocalValue(newLead.nextActionAt)}
+                  onChange={(e) => setNewLead({ ...newLead, nextActionAt: fromDateTimeLocalValue(e.target.value) })}
+                />
+              </Field>
+            </div>
+            <Field>
+              <FieldLabel>提醒方式</FieldLabel>
+              <div className="space-y-2 rounded-md border border-border bg-secondary/30 p-3">
+                {REMINDER_METHOD_OPTIONS.map((option) => (
+                  <label key={option.value} className="flex items-start gap-2 text-sm">
+                    <Checkbox
+                      checked={newLead.reminderMethods.includes(option.value)}
+                      onCheckedChange={() =>
+                        setNewLead({
+                          ...newLead,
+                          reminderMethods: toggleReminderMethod(newLead.reminderMethods, option.value),
+                        })
+                      }
+                    />
+                    <span className="space-y-0.5">
+                      <span className="block text-foreground">{option.label}</span>
+                      <span className="block text-xs text-muted-foreground">{option.description}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
             </Field>
             <Field>
               <FieldLabel>备注</FieldLabel>

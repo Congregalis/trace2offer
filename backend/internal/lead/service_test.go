@@ -18,6 +18,8 @@ func TestNormalizeMutationInput(t *testing.T) {
 		Status:            " ",
 		Priority:          -3,
 		NextAction:        "  follow up ",
+		NextActionAt:      "2026-03-20T09:30:00Z",
+		ReminderMethods:   []string{"web_push", "in_app", "web_push"},
 		Notes:             " note ",
 		CompanyWebsiteURL: " https://openai.com ",
 		JDURL:             " https://openai.com/careers/backend-engineer ",
@@ -53,6 +55,15 @@ func TestNormalizeMutationInput(t *testing.T) {
 	if normalized.Location != "San Francisco" {
 		t.Fatalf("expected trimmed location, got %q", normalized.Location)
 	}
+	if normalized.NextActionAt != "2026-03-20T09:30:00Z" {
+		t.Fatalf("expected normalized next_action_at, got %q", normalized.NextActionAt)
+	}
+	if len(normalized.ReminderMethods) != 2 {
+		t.Fatalf("expected deduplicated reminder methods, got %+v", normalized.ReminderMethods)
+	}
+	if normalized.ReminderMethods[0] != "web_push" || normalized.ReminderMethods[1] != "in_app" {
+		t.Fatalf("unexpected reminder methods order: %+v", normalized.ReminderMethods)
+	}
 }
 
 func TestNormalizeMutationInputCanonicalStatus(t *testing.T) {
@@ -78,6 +89,22 @@ func TestNormalizeMutationInputInvalidStatus(t *testing.T) {
 		Company:  "OpenAI",
 		Position: "Backend Engineer",
 		Status:   "some_invalid_status",
+	})
+	if err == nil {
+		t.Fatal("expected validation error, got nil")
+	}
+	if !IsValidationError(err) {
+		t.Fatalf("expected validation error, got %T %v", err, err)
+	}
+}
+
+func TestNormalizeMutationInputInvalidReminderMethod(t *testing.T) {
+	t.Parallel()
+
+	_, err := NormalizeMutationInput(model.LeadMutationInput{
+		Company:         "OpenAI",
+		Position:        "Backend Engineer",
+		ReminderMethods: []string{"sms"},
 	})
 	if err == nil {
 		t.Fatal("expected validation error, got nil")

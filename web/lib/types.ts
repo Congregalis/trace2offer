@@ -8,6 +8,8 @@ export type LeadStatus =
   | "rejected" // 被拒绝（对方拒绝）
   | "archived"; // 已归档
 
+export type ReminderMethod = "in_app" | "email" | "web_push";
+
 export interface Lead {
   id: string;
   company: string;
@@ -16,6 +18,8 @@ export interface Lead {
   status: LeadStatus;
   priority: number;
   nextAction: string;
+  nextActionAt: string;
+  reminderMethods: ReminderMethod[];
   notes: string;
   companyWebsiteUrl: string;
   jdUrl: string;
@@ -31,6 +35,8 @@ export interface LeadMutationInput {
   status: LeadStatus;
   priority: number;
   nextAction: string;
+  nextActionAt: string;
+  reminderMethods: ReminderMethod[];
   notes: string;
   companyWebsiteUrl: string;
   jdUrl: string;

@@ -12,6 +12,7 @@ import (
 	agentruntime "trace2offer/backend/agent"
 	"trace2offer/backend/internal/lead"
 	"trace2offer/backend/internal/model"
+	"trace2offer/backend/internal/reminder"
 	"trace2offer/backend/internal/stats"
 	"trace2offer/backend/internal/storage"
 )
@@ -32,9 +33,10 @@ type handler struct {
 	leads        *lead.Service
 	agentRuntime AgentRuntime
 	stats        *stats.Service
+	reminders    *reminder.Service
 }
 
-func NewRouter(leads storage.LeadStore, runtime AgentRuntime, statsService *stats.Service) *gin.Engine {
+func NewRouter(leads storage.LeadStore, runtime AgentRuntime, statsService *stats.Service, reminderService *reminder.Service) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery(), corsMiddleware())
 
@@ -42,6 +44,7 @@ func NewRouter(leads storage.LeadStore, runtime AgentRuntime, statsService *stat
 		leads:        lead.NewService(leads),
 		agentRuntime: runtime,
 		stats:        statsService,
+		reminders:    reminderService,
 	}
 
 	r.GET("/health", func(c *gin.Context) {
@@ -78,6 +81,9 @@ func NewRouter(leads storage.LeadStore, runtime AgentRuntime, statsService *stat
 		stats.GET("/summary", h.getStatsSummary)
 		stats.GET("", h.getStatsDashboard)
 		stats.GET("/", h.getStatsDashboard)
+
+		reminders := api.Group("/reminders")
+		reminders.GET("/due", h.getDueReminders)
 	}
 
 	return r
@@ -378,6 +384,14 @@ func (h *handler) getStatsSummary(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"data": h.stats.GetSummary()})
+}
+
+func (h *handler) getDueReminders(c *gin.Context) {
+	if h.reminders == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "reminder service is not configured"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": h.reminders.GetDue()})
 }
 
 func (h *handler) importUserProfile(c *gin.Context) {
