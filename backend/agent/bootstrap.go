@@ -69,8 +69,17 @@ func NewDefaultRuntime(config BootstrapConfig) (*Runtime, error) {
 
 	extractor := tool.NewLLMJDExtractor(modelProvider, strings.TrimSpace(config.OpenAIModel))
 	leadTools := tool.NewLeadCRUDTools(config.LeadManager, tool.WithJDExtractor(extractor))
-	allTools := make([]tool.Tool, 0, len(leadTools)+2)
+	
+	// Search tools (semantic lead search)
+	searchTools := []tool.Tool{&tool.SearchLeadsTool{Manager: config.LeadManager}}
+	
+	// Think tool (for complex reasoning)
+	thinkTools := []tool.Tool{&tool.ThinkTool{}}
+	
+	allTools := make([]tool.Tool, 0)
 	allTools = append(allTools, leadTools...)
+	allTools = append(allTools, searchTools...)
+	allTools = append(allTools, thinkTools...)
 	allTools = append(allTools, tool.NewInsightTools(config.StatsProvider)...)
 	registry, err := tool.NewRegistry(allTools...)
 	if err != nil {
