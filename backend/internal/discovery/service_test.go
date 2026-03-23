@@ -85,6 +85,12 @@ func TestRunOnceIngestsRSSIntoCandidates(t *testing.T) {
 	if candidates[0].Company != "Example" {
 		t.Fatalf("expected normalized company Example, got %q", candidates[0].Company)
 	}
+	if candidates[0].JDURL == "" {
+		t.Fatal("expected jd url to be populated")
+	}
+	if candidates[0].CompanyWebsiteURL != "" {
+		t.Fatalf("expected company website url empty when feed does not provide it, got %q", candidates[0].CompanyWebsiteURL)
+	}
 }
 
 func TestRunOnceUpsertsByJDURL(t *testing.T) {

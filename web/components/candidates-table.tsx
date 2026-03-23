@@ -7,6 +7,7 @@ import { DiscoveryRulesPanel } from "@/components/discovery-rules-panel";
 import { Candidate, CandidateMutationInput, CandidateStatus } from "@/lib/types";
 import { CANDIDATE_STATUS_CONFIG } from "@/lib/types";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -38,7 +39,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
-import { Badge } from "@/components/ui/badge";
 import { ArrowRightCircle, ExternalLink, MoreHorizontal, Pencil, Plus, Search, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -94,14 +94,6 @@ function formatDateTime(value: string): string {
   return `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, "0")}:${String(
     date.getMinutes()
   ).padStart(2, "0")}`;
-}
-
-function getCandidateSummary(candidate: Candidate): string {
-  const summary = candidate.recommendationNotes.trim() || candidate.notes.trim();
-  if (!summary) {
-    return "暂无发现摘要";
-  }
-  return summary;
 }
 
 function CandidateStatusBadge({ status }: { status: CandidateStatus }) {
@@ -270,7 +262,7 @@ export function CandidatesTable() {
           <TableHeader>
             <TableRow>
               <TableHead>公司 / 职位</TableHead>
-              <TableHead>发现摘要</TableHead>
+              <TableHead>详情</TableHead>
               <TableHead>状态</TableHead>
               <TableHead>匹配度</TableHead>
               <TableHead>更新时间</TableHead>
@@ -295,17 +287,6 @@ export function CandidatesTable() {
                       {candidate.source ? <div>来源：{candidate.source}</div> : null}
                     </div>
                     <div className="mt-3 flex flex-wrap gap-2">
-                      {candidate.jdUrl ? (
-                        <a
-                          href={candidate.jdUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1 text-xs text-primary underline-offset-4 hover:underline"
-                        >
-                          职位详情
-                          <ExternalLink className="h-3 w-3" />
-                        </a>
-                      ) : null}
                       {candidate.companyWebsiteUrl ? (
                         <a
                           href={candidate.companyWebsiteUrl}
@@ -320,8 +301,22 @@ export function CandidatesTable() {
                     </div>
                   </TableCell>
                   <TableCell className="align-top">
-                    <div className="max-w-sm space-y-2">
-                      <p className="line-clamp-3 text-sm text-muted-foreground">{getCandidateSummary(candidate)}</p>
+                    <div className="max-w-sm space-y-3">
+                      <div className="flex flex-wrap gap-3 text-sm">
+                        {candidate.jdUrl ? (
+                          <a
+                            href={candidate.jdUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 text-primary underline-offset-4 hover:underline"
+                          >
+                            职位详情
+                            <ExternalLink className="h-3.5 w-3.5" />
+                          </a>
+                        ) : (
+                          <span className="text-muted-foreground">暂无职位详情链接</span>
+                        )}
+                      </div>
                       {candidate.matchReasons.length > 0 ? (
                         <div className="flex flex-wrap gap-1">
                           {candidate.matchReasons.slice(0, 4).map((reason) => (
