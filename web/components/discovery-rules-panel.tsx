@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/table";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Badge } from "@/components/ui/badge";
-import { Layers3, Pencil, Play, Plus, RefreshCcw, Rocket, Settings2, Trash2 } from "lucide-react";
+import { Layers3, Pencil, Play, Plus, Rocket, Settings2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -67,7 +67,7 @@ function formatRunSummary(lastRun: DiscoveryRunResult | null): string {
 }
 
 export function DiscoveryRulesPanel({ onDiscoveryFinished }: { onDiscoveryFinished?: (result: DiscoveryRunResult) => Promise<void> | void }) {
-  const { rules, lastRun, isLoading, isSyncing, isRunning, hasLoaded, fetchRules, addRule, updateRule, deleteRule, runDiscoveryNow } =
+  const { rules, lastRun, isSyncing, isRunning, hasLoaded, fetchRules, addRule, updateRule, deleteRule, runDiscoveryNow } =
     useDiscoveryStore();
 
   const [isManageOpen, setIsManageOpen] = useState(false);
@@ -207,14 +207,14 @@ export function DiscoveryRulesPanel({ onDiscoveryFinished }: { onDiscoveryFinish
       </div>
 
       <Dialog open={isManageOpen} onOpenChange={setIsManageOpen}>
-        <DialogContent className="max-h-[calc(100vh-2rem)] w-[min(1240px,calc(100vw-2rem))] max-w-none overflow-hidden p-0">
+        <DialogContent className="max-h-[calc(100vh-2rem)] w-[calc(100vw-2rem)] max-w-none overflow-hidden p-0 sm:max-w-none xl:w-[min(1480px,calc(100vw-3rem))]">
           <div className="max-h-[calc(100vh-2rem)] overflow-y-auto p-6">
             <DialogHeader>
               <DialogTitle>发现规则管理</DialogTitle>
               <DialogDescription>配置职位来源与关键词，控制候选池自动发现行为。</DialogDescription>
             </DialogHeader>
 
-            <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
+            <div className="mt-4 grid gap-4 2xl:grid-cols-[minmax(0,460px)_minmax(0,1fr)]">
               <div className="space-y-3 rounded-lg border border-border bg-card/20 p-4">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div className="text-sm font-medium">{editingRule ? "编辑规则" : "新建规则"}</div>
@@ -328,7 +328,7 @@ export function DiscoveryRulesPanel({ onDiscoveryFinished }: { onDiscoveryFinish
                       {rules.length === 0 ? "还没有规则，先从上面的示例开始。" : "这里是当前已经生效的发现规则。"}
                     </p>
                   </div>
-                  <div className={cn("overflow-auto", rules.length > 0 ? "max-h-[520px]" : "max-h-none")}>
+                  <div className={cn("overflow-auto", rules.length > 0 ? "max-h-[620px]" : "max-h-none")}>
                     <Table>
                       <TableHeader className="sticky top-0 z-10 bg-background">
                         <TableRow>
