@@ -119,6 +119,26 @@ func (s *stubCandidateManager) Delete(id string) (bool, error) {
 	return false, nil
 }
 
+func (s *stubCandidateManager) UpsertByJDURL(input model.CandidateMutationInput) (model.Candidate, bool, error) {
+	for i := range s.candidates {
+		if s.candidates[i].JDURL != input.JDURL {
+			continue
+		}
+		updated := s.candidates[i]
+		updated.Company = input.Company
+		updated.Position = input.Position
+		updated.Source = input.Source
+		updated.Status = input.Status
+		updated.MatchScore = input.MatchScore
+		updated.MatchReasons = append([]string(nil), input.MatchReasons...)
+		updated.RecommendationNotes = input.RecommendationNotes
+		s.candidates[i] = updated
+		return updated, false, nil
+	}
+	created, err := s.Create(input)
+	return created, true, err
+}
+
 func (s *stubCandidateManager) Promote(id string, _ model.CandidatePromoteInput) (model.Candidate, model.Lead, error) {
 	for i := range s.candidates {
 		if s.candidates[i].ID != id {

@@ -108,6 +108,59 @@ func TestPromoteCandidateNotFound(t *testing.T) {
 	}
 }
 
+func TestUpsertByJDURLCreatesThenUpdates(t *testing.T) {
+	t.Parallel()
+
+	repo := &stubRepository{}
+	service := NewService(repo, &stubLeadManager{})
+
+	created, createdFlag, err := service.UpsertByJDURL(model.CandidateMutationInput{
+		Company:             "Anthropic",
+		Position:            "Software Engineer",
+		Source:              "RSS",
+		JDURL:               "https://jobs.example.com/positions/123?utm_source=feed",
+		Status:              "",
+		MatchScore:          80,
+		MatchReasons:        []string{"Go"},
+		RecommendationNotes: "first",
+	})
+	if err != nil {
+		t.Fatalf("upsert create failed: %v", err)
+	}
+	if !createdFlag {
+		t.Fatal("expected first upsert to create candidate")
+	}
+	if created.ID == "" {
+		t.Fatal("expected created candidate id not empty")
+	}
+
+	updated, createdFlag, err := service.UpsertByJDURL(model.CandidateMutationInput{
+		Company:             "Anthropic",
+		Position:            "Senior Software Engineer",
+		Source:              "RSS",
+		JDURL:               "https://jobs.example.com/positions/123?utm_source=other",
+		Status:              "",
+		MatchScore:          92,
+		MatchReasons:        []string{"Go", "Distributed Systems"},
+		RecommendationNotes: "second",
+	})
+	if err != nil {
+		t.Fatalf("upsert update failed: %v", err)
+	}
+	if createdFlag {
+		t.Fatal("expected second upsert to update existing candidate")
+	}
+	if updated.ID != created.ID {
+		t.Fatalf("expected same candidate id, got created=%q updated=%q", created.ID, updated.ID)
+	}
+	if updated.Position != "Senior Software Engineer" {
+		t.Fatalf("expected position updated, got %q", updated.Position)
+	}
+	if updated.MatchScore != 92 {
+		t.Fatalf("expected score updated, got %d", updated.MatchScore)
+	}
+}
+
 type stubRepository struct {
 	candidates []model.Candidate
 }

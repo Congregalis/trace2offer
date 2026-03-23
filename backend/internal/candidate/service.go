@@ -3,6 +3,7 @@ package candidate
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"trace2offer/backend/internal/lead"
@@ -50,6 +51,7 @@ type Manager interface {
 	Create(input model.CandidateMutationInput) (model.Candidate, error)
 	Update(id string, input model.CandidateMutationInput) (model.Candidate, bool, error)
 	Delete(id string) (bool, error)
+	UpsertByJDURL(input model.CandidateMutationInput) (model.Candidate, bool, error)
 	Promote(id string, input model.CandidatePromoteInput) (model.Candidate, model.Lead, error)
 }
 
@@ -132,6 +134,59 @@ func (s *Service) Delete(id string) (bool, error) {
 		return false, err
 	}
 	return s.repo.Delete(normalizedID)
+}
+
+// UpsertByJDURL creates or updates candidate by canonical jd_url.
+// Returns created=true when a new candidate is inserted.
+func (s *Service) UpsertByJDURL(input model.CandidateMutationInput) (model.Candidate, bool, error) {
+	if s == nil || s.repo == nil {
+		return model.Candidate{}, false, ErrRepositoryUnavailable
+	}
+
+	normalizedInput, err := normalizeMutationInput(input, false)
+	if err != nil {
+		return model.Candidate{}, false, err
+	}
+	canonicalURL := canonicalizeCandidateJDURL(normalizedInput.JDURL)
+	if canonicalURL == "" {
+		return model.Candidate{}, false, &ValidationError{
+			Field:   "jd_url",
+			Message: "jd_url is required for upsert",
+		}
+	}
+	normalizedInput.JDURL = canonicalURL
+
+	for _, item := range s.repo.List() {
+		if canonicalizeCandidateJDURL(item.JDURL) != canonicalURL {
+			continue
+		}
+
+		updateInput := normalizedInput
+		updateInput.Status = item.Status
+		updateInput.PromotedLeadID = item.PromotedLeadID
+		if item.Status != StatusPromoted && item.Status != StatusDismissed {
+			updateInput.Status = normalizedInput.Status
+		}
+		allowPromoted := updateInput.Status == StatusPromoted
+		updateInput, err = normalizeMutationInput(updateInput, allowPromoted)
+		if err != nil {
+			return model.Candidate{}, false, err
+		}
+		updated, found, err := s.repo.Update(item.ID, updateInput)
+		if err != nil {
+			return model.Candidate{}, false, err
+		}
+		if !found {
+			return model.Candidate{}, false, ErrCandidateNotFound
+		}
+		return updated, false, nil
+	}
+
+	created, err := s.repo.Create(normalizedInput)
+	if err != nil {
+		return model.Candidate{}, false, err
+	}
+	return created, true, nil
 }
 
 func (s *Service) Promote(id string, input model.CandidatePromoteInput) (model.Candidate, model.Lead, error) {
@@ -342,4 +397,25 @@ func chooseNonEmpty(primary string, fallback string) string {
 		return strings.TrimSpace(primary)
 	}
 	return strings.TrimSpace(fallback)
+}
+
+func canonicalizeCandidateJDURL(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return ""
+	}
+
+	parsed, err := url.Parse(trimmed)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return trimmed
+	}
+
+	parsed.Host = strings.ToLower(parsed.Host)
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
+	if parsed.Path == "/" {
+		parsed.Path = ""
+	}
+	parsed.Path = strings.TrimRight(parsed.Path, "/")
+	return parsed.String()
 }
