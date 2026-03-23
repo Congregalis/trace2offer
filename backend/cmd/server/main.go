@@ -42,6 +42,10 @@ func main() {
 	if err != nil {
 		log.Fatalf("init lead store failed: %v", err)
 	}
+	candidateStore, err := storage.NewFileCandidateStore(filepath.Join(dataDir, "candidates.json"))
+	if err != nil {
+		log.Fatalf("init candidate store failed: %v", err)
+	}
 	leadTimelineStore, err := storage.NewFileLeadTimelineStore(filepath.Join(dataDir, "lead_timelines.json"))
 	if err != nil {
 		log.Fatalf("init lead timeline store failed: %v", err)
@@ -92,7 +96,7 @@ func main() {
 
 	go heartbeatService.Start(context.Background())
 
-	router := api.NewRouter(leadStore, leadTimelineStore, runtime, statsService, reminderService, heartbeatService, calendarService)
+	router := api.NewRouter(leadStore, candidateStore, leadTimelineStore, runtime, statsService, reminderService, heartbeatService, calendarService)
 	addr := ":" + port
 	log.Printf("trace2offer backend listening on %s", addr)
 	if err := router.Run(addr); err != nil {

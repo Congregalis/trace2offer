@@ -28,6 +28,10 @@ func TestLeadAndChatAPI(t *testing.T) {
 	if err != nil {
 		t.Fatalf("init lead store: %v", err)
 	}
+	candidateStore, err := storage.NewFileCandidateStore(filepath.Join(tmpDir, "candidates.json"))
+	if err != nil {
+		t.Fatalf("init candidate store: %v", err)
+	}
 	leadTimelineStore, err := storage.NewFileLeadTimelineStore(filepath.Join(tmpDir, "lead_timelines.json"))
 	if err != nil {
 		t.Fatalf("init lead timeline store: %v", err)
@@ -44,7 +48,7 @@ func TestLeadAndChatAPI(t *testing.T) {
 	}
 	_ = heartbeatService.RunOnce(time.Now().UTC())
 
-	router := NewRouter(leadStore, leadTimelineStore, &stubAgentRuntime{}, statsService, reminderService, heartbeatService, calendar.NewService(leadStore))
+	router := NewRouter(leadStore, candidateStore, leadTimelineStore, &stubAgentRuntime{}, statsService, reminderService, heartbeatService, calendar.NewService(leadStore))
 
 	resp := doJSONRequest(t, router, http.MethodGet, "/api/leads", nil)
 	if resp.Code != http.StatusOK {
@@ -193,6 +197,102 @@ func TestLeadAndChatAPI(t *testing.T) {
 	resp = doJSONRequest(t, router, http.MethodDelete, "/api/leads/"+leadID, nil)
 	if resp.Code != http.StatusNoContent {
 		t.Fatalf("DELETE /api/leads/:id status=%d body=%s", resp.Code, resp.Body.String())
+	}
+
+	candidateCreateReq := map[string]any{
+		"company":              "Anthropic",
+		"position":             "Software Engineer",
+		"source":               "LinkedIn",
+		"location":             "Remote",
+		"jd_url":               "https://www.anthropic.com/careers/software-engineer",
+		"company_website_url":  "https://www.anthropic.com",
+		"match_score":          88,
+		"match_reasons":        []string{"Go backend", "LLM infra"},
+		"recommendation_notes": "符合画像",
+	}
+
+	resp = doJSONRequest(t, router, http.MethodPost, "/api/candidates", candidateCreateReq)
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("POST /api/candidates status=%d body=%s", resp.Code, resp.Body.String())
+	}
+
+	var candidateCreatePayload struct {
+		Data model.Candidate `json:"data"`
+	}
+	decodeJSONBody(t, resp, &candidateCreatePayload)
+	if candidateCreatePayload.Data.ID == "" {
+		t.Fatal("created candidate ID should not be empty")
+	}
+	if candidateCreatePayload.Data.Status != "pending_review" {
+		t.Fatalf("expected default candidate status pending_review, got %q", candidateCreatePayload.Data.Status)
+	}
+
+	candidateID := candidateCreatePayload.Data.ID
+
+	resp = doJSONRequest(t, router, http.MethodGet, "/api/candidates", nil)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("GET /api/candidates status=%d body=%s", resp.Code, resp.Body.String())
+	}
+
+	var candidateListPayload struct {
+		Data []model.Candidate `json:"data"`
+	}
+	decodeJSONBody(t, resp, &candidateListPayload)
+	if len(candidateListPayload.Data) == 0 {
+		t.Fatal("expected candidates list not empty")
+	}
+
+	candidateUpdateReq := map[string]any{
+		"company":              "Anthropic",
+		"position":             "Software Engineer",
+		"source":               "LinkedIn",
+		"location":             "Remote",
+		"jd_url":               "https://www.anthropic.com/careers/software-engineer",
+		"company_website_url":  "https://www.anthropic.com",
+		"status":               "shortlisted",
+		"match_score":          92,
+		"match_reasons":        []string{"Go backend", "LLM infra", "系统设计"},
+		"recommendation_notes": "更新后更匹配",
+	}
+	resp = doJSONRequest(t, router, http.MethodPatch, "/api/candidates/"+candidateID, candidateUpdateReq)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("PATCH /api/candidates/:id status=%d body=%s", resp.Code, resp.Body.String())
+	}
+
+	var candidateUpdatePayload struct {
+		Data model.Candidate `json:"data"`
+	}
+	decodeJSONBody(t, resp, &candidateUpdatePayload)
+	if candidateUpdatePayload.Data.Status != "shortlisted" {
+		t.Fatalf("expected status shortlisted, got %q", candidateUpdatePayload.Data.Status)
+	}
+
+	resp = doJSONRequest(t, router, http.MethodPost, "/api/candidates/"+candidateID+"/promote", map[string]any{
+		"status":      "new",
+		"priority":    5,
+		"next_action": "完善简历并投递",
+	})
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("POST /api/candidates/:id/promote status=%d body=%s", resp.Code, resp.Body.String())
+	}
+
+	var candidatePromotePayload struct {
+		Data struct {
+			Candidate model.Candidate `json:"candidate"`
+			Lead      model.Lead      `json:"lead"`
+		} `json:"data"`
+	}
+	decodeJSONBody(t, resp, &candidatePromotePayload)
+	if candidatePromotePayload.Data.Lead.ID == "" {
+		t.Fatal("promoted lead id should not be empty")
+	}
+	if candidatePromotePayload.Data.Candidate.Status != "promoted" {
+		t.Fatalf("expected candidate status promoted, got %q", candidatePromotePayload.Data.Candidate.Status)
+	}
+
+	resp = doJSONRequest(t, router, http.MethodDelete, "/api/candidates/"+candidateID, nil)
+	if resp.Code != http.StatusNoContent {
+		t.Fatalf("DELETE /api/candidates/:id status=%d body=%s", resp.Code, resp.Body.String())
 	}
 
 	resp = doJSONRequest(t, router, http.MethodGet, "/api/lead-timelines", nil)

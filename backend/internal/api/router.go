@@ -14,6 +14,7 @@ import (
 
 	agentruntime "trace2offer/backend/agent"
 	"trace2offer/backend/internal/calendar"
+	"trace2offer/backend/internal/candidate"
 	"trace2offer/backend/internal/heartbeat"
 	"trace2offer/backend/internal/lead"
 	"trace2offer/backend/internal/model"
@@ -37,6 +38,7 @@ type AgentRuntime interface {
 
 type handler struct {
 	leads        *lead.Service
+	candidates   *candidate.Service
 	agentRuntime AgentRuntime
 	stats        *stats.Service
 	reminders    *reminder.Service
@@ -45,13 +47,15 @@ type handler struct {
 	timelines    *timeline.Service
 }
 
-func NewRouter(leads storage.LeadStore, leadTimelines storage.LeadTimelineStore, runtime AgentRuntime, statsService *stats.Service, reminderService *reminder.Service, heartbeatService *heartbeat.Service, calendarService *calendar.Service) *gin.Engine {
+func NewRouter(leads storage.LeadStore, candidates storage.CandidateStore, leadTimelines storage.LeadTimelineStore, runtime AgentRuntime, statsService *stats.Service, reminderService *reminder.Service, heartbeatService *heartbeat.Service, calendarService *calendar.Service) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery(), corsMiddleware())
 
 	timelineService := timeline.NewService(leadTimelines)
+	leadService := lead.NewService(leads).WithStatusObserver(timelineService)
 	h := &handler{
-		leads:        lead.NewService(leads).WithStatusObserver(timelineService),
+		leads:        leadService,
+		candidates:   candidate.NewService(candidates, leadService),
 		agentRuntime: runtime,
 		stats:        statsService,
 		reminders:    reminderService,
@@ -71,6 +75,14 @@ func NewRouter(leads storage.LeadStore, leadTimelines storage.LeadTimelineStore,
 		api.PUT("/leads/:id", h.updateLead)
 		api.PATCH("/leads/:id", h.updateLead)
 		api.DELETE("/leads/:id", h.deleteLead)
+
+		api.GET("/candidates", h.listCandidates)
+		api.POST("/candidates", h.createCandidate)
+		api.PUT("/candidates/:id", h.updateCandidate)
+		api.PATCH("/candidates/:id", h.updateCandidate)
+		api.DELETE("/candidates/:id", h.deleteCandidate)
+		api.POST("/candidates/:id/promote", h.promoteCandidate)
+
 		api.GET("/lead-timelines", h.listLeadTimelines)
 
 		agent := api.Group("/agent")
@@ -188,6 +200,109 @@ func (h *handler) listLeadTimelines(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"data": h.timelines.List()})
+}
+
+func (h *handler) listCandidates(c *gin.Context) {
+	if h.candidates == nil {
+		c.JSON(http.StatusOK, gin.H{"data": []model.Candidate{}})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": h.candidates.List()})
+}
+
+func (h *handler) createCandidate(c *gin.Context) {
+	input, ok := bindCandidateInput(c)
+	if !ok {
+		return
+	}
+	if h.candidates == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "candidate service is not configured"})
+		return
+	}
+
+	created, err := h.candidates.Create(input)
+	if err != nil {
+		respondCandidateError(c, "create candidate failed", err)
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{"data": created})
+}
+
+func (h *handler) updateCandidate(c *gin.Context) {
+	input, ok := bindCandidateInput(c)
+	if !ok {
+		return
+	}
+	if h.candidates == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "candidate service is not configured"})
+		return
+	}
+
+	updated, found, err := h.candidates.Update(c.Param("id"), input)
+	if err != nil {
+		respondCandidateError(c, "update candidate failed", err)
+		return
+	}
+	if !found {
+		c.JSON(http.StatusNotFound, gin.H{"message": "candidate not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": updated})
+}
+
+func (h *handler) deleteCandidate(c *gin.Context) {
+	if h.candidates == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "candidate service is not configured"})
+		return
+	}
+
+	deleted, err := h.candidates.Delete(c.Param("id"))
+	if err != nil {
+		respondCandidateError(c, "delete candidate failed", err)
+		return
+	}
+	if !deleted {
+		c.JSON(http.StatusNotFound, gin.H{"message": "candidate not found"})
+		return
+	}
+
+	c.Status(http.StatusNoContent)
+}
+
+func (h *handler) promoteCandidate(c *gin.Context) {
+	if h.candidates == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "candidate service is not configured"})
+		return
+	}
+
+	var input model.CandidatePromoteInput
+	if err := c.ShouldBindJSON(&input); err != nil && !errors.Is(err, io.EOF) {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid candidate promote payload", "error": err.Error()})
+		return
+	}
+
+	updatedCandidate, createdLead, err := h.candidates.Promote(c.Param("id"), input)
+	if err != nil {
+		if errors.Is(err, candidate.ErrCandidateNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"message": "candidate not found"})
+			return
+		}
+		respondCandidateError(c, "promote candidate failed", err)
+		return
+	}
+
+	if h.stats != nil {
+		h.stats.InvalidateCache()
+	}
+
+	c.JSON(http.StatusCreated, gin.H{
+		"data": gin.H{
+			"candidate": updatedCandidate,
+			"lead":      createdLead,
+		},
+	})
 }
 
 func (h *handler) chatWithAgent(c *gin.Context) {
@@ -556,7 +671,33 @@ func bindLeadInput(c *gin.Context) (model.LeadMutationInput, bool) {
 	return input, true
 }
 
+func bindCandidateInput(c *gin.Context) (model.CandidateMutationInput, bool) {
+	var input model.CandidateMutationInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid candidate payload", "error": err.Error()})
+		return model.CandidateMutationInput{}, false
+	}
+	return input, true
+}
+
 func respondLeadError(c *gin.Context, message string, err error) {
+	if lead.IsValidationError(err) {
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusInternalServerError, gin.H{"message": message, "error": err.Error()})
+}
+
+func respondCandidateError(c *gin.Context, message string, err error) {
+	if candidate.IsValidationError(err) {
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		return
+	}
+	if errors.Is(err, candidate.ErrRepositoryUnavailable) || errors.Is(err, candidate.ErrLeadManagerUnavailable) {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"message": err.Error()})
+		return
+	}
 	if lead.IsValidationError(err) {
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return
