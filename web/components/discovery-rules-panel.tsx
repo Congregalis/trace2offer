@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import type { DiscoveryPreset } from "@/lib/discovery-presets";
 import { DiscoveryRule, DiscoveryRuleMutationInput, DiscoveryRunResult } from "@/lib/types";
+import { DiscoveryPresetCards } from "@/components/discovery-preset-cards";
+import { DiscoveryQuickstartDialog } from "@/components/discovery-quickstart-dialog";
 import { useDiscoveryStore } from "@/lib/discovery-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -71,6 +74,7 @@ export function DiscoveryRulesPanel({ onDiscoveryFinished }: { onDiscoveryFinish
   const [ruleForm, setRuleForm] = useState<DiscoveryRuleMutationInput>(EMPTY_RULE);
   const [includeKeywordsInput, setIncludeKeywordsInput] = useState("");
   const [excludeKeywordsInput, setExcludeKeywordsInput] = useState("");
+  const [isQuickstartOpen, setIsQuickstartOpen] = useState(false);
 
   useEffect(() => {
     if (hasLoaded) {
@@ -158,6 +162,17 @@ export function DiscoveryRulesPanel({ onDiscoveryFinished }: { onDiscoveryFinish
     }
   };
 
+  const handleAddPreset = async (preset: DiscoveryPreset) => {
+    try {
+      await addRule(preset.rule);
+      toast.success(`${preset.name} 已添加`);
+      await fetchRules();
+    } catch (error) {
+      const message = error instanceof Error && error.message ? error.message : "添加示例规则失败";
+      toast.error(message);
+    }
+  };
+
   return (
     <div className="rounded-xl border border-border bg-card/30 p-3 sm:p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -167,6 +182,13 @@ export function DiscoveryRulesPanel({ onDiscoveryFinished }: { onDiscoveryFinish
             <Badge variant="secondary">{enabledCount}/{rules.length} 已启用</Badge>
           </div>
           <p className="text-xs text-muted-foreground">{formatRunSummary(lastRun)}</p>
+          <button
+            type="button"
+            className="text-xs text-primary underline-offset-4 hover:underline"
+            onClick={() => setIsQuickstartOpen(true)}
+          >
+            不会填？看快速上手
+          </button>
         </div>
         <div className="flex items-center gap-2">
           <Button size="sm" variant="outline" onClick={() => void fetchRules()} disabled={isLoading || isSyncing || isRunning}>
@@ -249,73 +271,87 @@ export function DiscoveryRulesPanel({ onDiscoveryFinished }: { onDiscoveryFinish
             </div>
 
             <div className="overflow-hidden rounded-lg border border-border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>规则</TableHead>
-                    <TableHead>来源</TableHead>
-                    <TableHead>关键词</TableHead>
-                    <TableHead>状态</TableHead>
-                    <TableHead className="text-right">操作</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {rules.length === 0 ? (
+              <div className="space-y-4 p-3">
+                <DiscoveryPresetCards
+                  rules={rules}
+                  onAddPreset={handleAddPreset}
+                  onOpenHelp={() => setIsQuickstartOpen(true)}
+                  isBusy={isSyncing || isRunning}
+                  title="推荐示例规则"
+                  description="新手先点一条能跑起来的，老用户也可以拿它们补充规则池。"
+                  className="border-0 bg-transparent p-0"
+                />
+
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
-                        暂无规则
-                      </TableCell>
+                      <TableHead>规则</TableHead>
+                      <TableHead>来源</TableHead>
+                      <TableHead>关键词</TableHead>
+                      <TableHead>状态</TableHead>
+                      <TableHead className="text-right">操作</TableHead>
                     </TableRow>
-                  ) : (
-                    rules.map((rule) => (
-                      <TableRow key={rule.id}>
-                        <TableCell className="align-top">
-                          <div className="font-medium">{rule.name}</div>
-                          <div className="line-clamp-1 text-xs text-muted-foreground">{rule.feedUrl}</div>
-                        </TableCell>
-                        <TableCell className="align-top text-sm text-muted-foreground">{rule.source || "-"}</TableCell>
-                        <TableCell className="align-top">
-                          <div className="text-xs text-muted-foreground">
-                            + {rule.includeKeywords.join(", ") || "-"}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            - {rule.excludeKeywords.join(", ") || "-"}
-                          </div>
-                        </TableCell>
-                        <TableCell className="align-top">
-                          <Badge variant={rule.enabled ? "default" : "secondary"}>
-                            {rule.enabled ? "启用" : "停用"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="align-top text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <Button size="sm" variant="outline" onClick={() => beginEdit(rule)} disabled={isSyncing || isRunning}>
-                              <Pencil className="mr-1 h-3.5 w-3.5" />
-                              编辑
-                            </Button>
-                            <Button size="sm" variant="outline" onClick={() => void handleToggleRule(rule)} disabled={isSyncing || isRunning}>
-                              {rule.enabled ? "停用" : "启用"}
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              onClick={() => void handleDeleteRule(rule.id)}
-                              disabled={isSyncing || isRunning}
-                            >
-                              <Trash2 className="mr-1 h-3.5 w-3.5" />
-                              删除
-                            </Button>
-                          </div>
+                  </TableHeader>
+                  <TableBody>
+                    {rules.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
+                          暂无规则
                         </TableCell>
                       </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
+                    ) : (
+                      rules.map((rule) => (
+                        <TableRow key={rule.id}>
+                          <TableCell className="align-top">
+                            <div className="font-medium">{rule.name}</div>
+                            <div className="line-clamp-1 text-xs text-muted-foreground">{rule.feedUrl}</div>
+                          </TableCell>
+                          <TableCell className="align-top text-sm text-muted-foreground">{rule.source || "-"}</TableCell>
+                          <TableCell className="align-top">
+                            <div className="text-xs text-muted-foreground">
+                              + {rule.includeKeywords.join(", ") || "-"}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              - {rule.excludeKeywords.join(", ") || "-"}
+                            </div>
+                          </TableCell>
+                          <TableCell className="align-top">
+                            <Badge variant={rule.enabled ? "default" : "secondary"}>
+                              {rule.enabled ? "启用" : "停用"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="align-top text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <Button size="sm" variant="outline" onClick={() => beginEdit(rule)} disabled={isSyncing || isRunning}>
+                                <Pencil className="mr-1 h-3.5 w-3.5" />
+                                编辑
+                              </Button>
+                              <Button size="sm" variant="outline" onClick={() => void handleToggleRule(rule)} disabled={isSyncing || isRunning}>
+                                {rule.enabled ? "停用" : "启用"}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => void handleDeleteRule(rule.id)}
+                                disabled={isSyncing || isRunning}
+                              >
+                                <Trash2 className="mr-1 h-3.5 w-3.5" />
+                                删除
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
             </div>
           </div>
         </DialogContent>
       </Dialog>
+
+      <DiscoveryQuickstartDialog open={isQuickstartOpen} onOpenChange={setIsQuickstartOpen} />
     </div>
   );
 }
