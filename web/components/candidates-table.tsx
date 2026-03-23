@@ -2,6 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useCandidatesStore } from "@/lib/candidates-store";
+import { DiscoveryPresetCards } from "@/components/discovery-preset-cards";
+import { useDiscoveryStore } from "@/lib/discovery-store";
+import type { DiscoveryPreset } from "@/lib/discovery-presets";
 import { useLeadsStore } from "@/lib/leads-store";
 import { DiscoveryRulesPanel } from "@/components/discovery-rules-panel";
 import { Candidate, CandidateMutationInput, CandidateStatus } from "@/lib/types";
@@ -106,6 +109,13 @@ function CandidateStatusBadge({ status }: { status: CandidateStatus }) {
 
 export function CandidatesTable() {
   const { fetchLeads } = useLeadsStore();
+  const {
+    rules,
+    isSyncing: isDiscoverySyncing,
+    hasLoaded: hasDiscoveryLoaded,
+    fetchRules,
+    addRule,
+  } = useDiscoveryStore();
   const { candidates, isLoading, isSyncing, hasLoaded, fetchCandidates, addCandidate, updateCandidate, deleteCandidate, promoteCandidate } =
     useCandidatesStore();
 
@@ -125,6 +135,16 @@ export function CandidatesTable() {
       toast.error(message);
     });
   }, [fetchCandidates, hasLoaded]);
+
+  useEffect(() => {
+    if (hasDiscoveryLoaded) {
+      return;
+    }
+    void fetchRules().catch((error) => {
+      const message = error instanceof Error && error.message ? error.message : "加载发现规则失败";
+      toast.error(message);
+    });
+  }, [fetchRules, hasDiscoveryLoaded]);
 
   const filtered = useMemo(() => {
     const keyword = search.trim().toLowerCase();
@@ -232,8 +252,29 @@ export function CandidatesTable() {
   const syncingLabel = isSyncing ? "同步中..." : "";
   const loadingLabel = isLoading ? "加载中..." : "";
 
+  const handleAddPreset = async (preset: DiscoveryPreset) => {
+    try {
+      await addRule(preset.rule);
+      toast.success(`${preset.name} 已添加`);
+      await fetchRules();
+    } catch (error) {
+      const message = error instanceof Error && error.message ? error.message : "添加示例规则失败";
+      toast.error(message);
+    }
+  };
+
   return (
     <div className="space-y-3">
+      {hasDiscoveryLoaded && rules.length === 0 ? (
+        <DiscoveryPresetCards
+          rules={rules}
+          isBusy={isDiscoverySyncing}
+          onAddPreset={handleAddPreset}
+          title="快速开始"
+          description="先加一条推荐示例规则，再点一次“立即发现”，就能把第一批候选职位跑出来。"
+        />
+      ) : null}
+
       <DiscoveryRulesPanel
         onDiscoveryFinished={async () => {
           await fetchCandidates();
