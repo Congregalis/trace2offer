@@ -1,5 +1,6 @@
 import { Nav } from "@/components/nav";
 import { LeadsTable } from "@/components/leads-table";
+import { CandidatesTable } from "@/components/candidates-table";
 import { LeadTimelineBoard } from "@/components/lead-timeline-board";
 import { ReminderCenter } from "@/components/reminder-center";
 import { StatsCards } from "@/components/stats-cards";
@@ -35,6 +36,12 @@ export default function HomePage() {
               <Tabs defaultValue="table" className="space-y-3">
                 <TabsList className="h-8 rounded-md bg-transparent p-0">
                   <TabsTrigger
+                    value="candidates"
+                    className="h-7 rounded-md px-3 text-xs font-normal text-muted-foreground data-[state=active]:bg-muted/60 data-[state=active]:text-foreground data-[state=active]:shadow-none dark:data-[state=active]:bg-muted/50"
+                  >
+                    候选池
+                  </TabsTrigger>
+                  <TabsTrigger
                     value="table"
                     className="h-7 rounded-md px-3 text-xs font-normal text-muted-foreground data-[state=active]:bg-muted/60 data-[state=active]:text-foreground data-[state=active]:shadow-none dark:data-[state=active]:bg-muted/50"
                   >
@@ -47,6 +54,10 @@ export default function HomePage() {
                     时间线
                   </TabsTrigger>
                 </TabsList>
+
+                <TabsContent value="candidates">
+                  <CandidatesTable />
+                </TabsContent>
 
                 <TabsContent value="table">
                   <LeadsTable />
