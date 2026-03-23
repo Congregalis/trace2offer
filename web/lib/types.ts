@@ -89,6 +89,39 @@ export interface CandidatePromoteInput {
   notes: string;
 }
 
+export interface DiscoveryRule {
+  id: string;
+  name: string;
+  feedUrl: string;
+  source: string;
+  defaultLocation: string;
+  includeKeywords: string[];
+  excludeKeywords: string[];
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DiscoveryRuleMutationInput {
+  name: string;
+  feedUrl: string;
+  source: string;
+  defaultLocation: string;
+  includeKeywords: string[];
+  excludeKeywords: string[];
+  enabled: boolean;
+}
+
+export interface DiscoveryRunResult {
+  ranAt: string;
+  rulesTotal: number;
+  rulesExecuted: number;
+  entriesFetched: number;
+  candidatesCreated: number;
+  candidatesUpdated: number;
+  errors: string[];
+}
+
 export interface LeadTimeline {
   leadId: string;
   stages: LeadTimelineStage[];
