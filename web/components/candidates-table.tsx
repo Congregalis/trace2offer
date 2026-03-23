@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useCandidatesStore } from "@/lib/candidates-store";
 import { useLeadsStore } from "@/lib/leads-store";
+import { DiscoveryRulesPanel } from "@/components/discovery-rules-panel";
 import { Candidate, CandidateMutationInput, CandidateStatus } from "@/lib/types";
 import { CANDIDATE_STATUS_CONFIG } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -233,6 +234,12 @@ export function CandidatesTable() {
 
   return (
     <div className="space-y-3">
+      <DiscoveryRulesPanel
+        onDiscoveryFinished={async () => {
+          await fetchCandidates();
+        }}
+      />
+
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="relative w-full sm:max-w-sm">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
