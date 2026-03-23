@@ -29,6 +29,7 @@ interface DiscoveryPresetCardsProps {
   onAddPreset: (preset: DiscoveryPreset) => void | Promise<void>;
   onOpenHelp?: () => void;
   isBusy?: boolean;
+  groups?: DiscoveryPresetGroup[];
   className?: string;
   title?: string;
   description?: string;
@@ -131,6 +132,7 @@ export function DiscoveryPresetCards({
   onAddPreset,
   onOpenHelp,
   isBusy = false,
+  groups = ["priority", "general"],
   className,
   title = "推荐示例规则",
   description = "先加一条能跑起来的规则，比盯着空表单发呆强多了。",
@@ -153,8 +155,8 @@ export function DiscoveryPresetCards({
         ) : null}
       </div>
 
-      <PresetGroup group="priority" rules={rules} onAddPreset={onAddPreset} isBusy={isBusy} />
-      <PresetGroup group="general" rules={rules} onAddPreset={onAddPreset} isBusy={isBusy} />
+      {groups.includes("priority") ? <PresetGroup group="priority" rules={rules} onAddPreset={onAddPreset} isBusy={isBusy} /> : null}
+      {groups.includes("general") ? <PresetGroup group="general" rules={rules} onAddPreset={onAddPreset} isBusy={isBusy} /> : null}
     </div>
   );
 }

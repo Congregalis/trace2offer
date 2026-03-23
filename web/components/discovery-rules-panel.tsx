@@ -2,9 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import type { DiscoveryPreset } from "@/lib/discovery-presets";
+import type { DiscoveryPreset, DiscoveryPresetGroup } from "@/lib/discovery-presets";
 import { DiscoveryRule, DiscoveryRuleMutationInput, DiscoveryRunResult } from "@/lib/types";
-import { DiscoveryPresetCards } from "@/components/discovery-preset-cards";
+import { DiscoveryPresetPickerDialog } from "@/components/discovery-preset-picker-dialog";
 import { useDiscoveryStore } from "@/lib/discovery-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/table";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Badge } from "@/components/ui/badge";
-import { RefreshCcw, Settings2, Plus, Trash2, Pencil, Play } from "lucide-react";
+import { Layers3, Pencil, Play, Plus, RefreshCcw, Rocket, Settings2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 const EMPTY_RULE: DiscoveryRuleMutationInput = {
@@ -74,6 +74,7 @@ export function DiscoveryRulesPanel({ onDiscoveryFinished }: { onDiscoveryFinish
   const [ruleForm, setRuleForm] = useState<DiscoveryRuleMutationInput>(EMPTY_RULE);
   const [includeKeywordsInput, setIncludeKeywordsInput] = useState("");
   const [excludeKeywordsInput, setExcludeKeywordsInput] = useState("");
+  const [presetPickerGroup, setPresetPickerGroup] = useState<DiscoveryPresetGroup | null>(null);
 
   useEffect(() => {
     if (hasLoaded) {
@@ -271,13 +272,45 @@ export function DiscoveryRulesPanel({ onDiscoveryFinished }: { onDiscoveryFinish
               </div>
 
               {rules.length === 0 ? (
-                <DiscoveryPresetCards
-                  rules={rules}
-                  onAddPreset={handleAddPreset}
-                  isBusy={isSyncing || isRunning}
-                  title="快速开始"
-                  description="第一次没有规则时，先加一条推荐示例，再点“立即发现”。候选池本身就只负责展示候选。"
-                />
+                <div className="grid gap-3 md:grid-cols-2">
+                  <button
+                    type="button"
+                    className="rounded-xl border border-border bg-card/30 p-4 text-left transition-colors hover:bg-card/50"
+                    onClick={() => setPresetPickerGroup("priority")}
+                    disabled={isSyncing || isRunning}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="rounded-lg border border-border/80 bg-background/80 p-2">
+                        <Rocket className="h-4 w-4 text-foreground" />
+                      </div>
+                      <div className="space-y-1">
+                        <div className="text-sm font-medium text-foreground">快速开始</div>
+                        <p className="text-xs text-muted-foreground">
+                          第一次没有规则时，先看最贴近 Software Engineer / Agent / AI Infra 的示例规则。
+                        </p>
+                      </div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="rounded-xl border border-border bg-card/30 p-4 text-left transition-colors hover:bg-card/50"
+                    onClick={() => setPresetPickerGroup("general")}
+                    disabled={isSyncing || isRunning}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="rounded-lg border border-border/80 bg-background/80 p-2">
+                        <Layers3 className="h-4 w-4 text-foreground" />
+                      </div>
+                      <div className="space-y-1">
+                        <div className="text-sm font-medium text-foreground">通用补充</div>
+                        <p className="text-xs text-muted-foreground">
+                          等基础规则跑顺了，再补更宽的软件工程远程岗位来源，别一上来全摊开。
+                        </p>
+                      </div>
+                    </div>
+                  </button>
+                </div>
               ) : null}
 
               <div className="overflow-hidden rounded-lg border border-border">
@@ -349,6 +382,21 @@ export function DiscoveryRulesPanel({ onDiscoveryFinished }: { onDiscoveryFinish
           </div>
         </DialogContent>
       </Dialog>
+
+      {presetPickerGroup ? (
+        <DiscoveryPresetPickerDialog
+          open={presetPickerGroup !== null}
+          onOpenChange={(open) => {
+            if (!open) {
+              setPresetPickerGroup(null);
+            }
+          }}
+          group={presetPickerGroup}
+          rules={rules}
+          onAddPreset={handleAddPreset}
+          isBusy={isSyncing || isRunning}
+        />
+      ) : null}
     </div>
   );
 }
