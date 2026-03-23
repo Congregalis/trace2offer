@@ -9,12 +9,14 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
 	agentruntime "trace2offer/backend/agent"
 	"trace2offer/backend/internal/calendar"
 	"trace2offer/backend/internal/candidate"
+	"trace2offer/backend/internal/discovery"
 	"trace2offer/backend/internal/heartbeat"
 	"trace2offer/backend/internal/lead"
 	"trace2offer/backend/internal/model"
@@ -39,6 +41,7 @@ type AgentRuntime interface {
 type handler struct {
 	leads        *lead.Service
 	candidates   *candidate.Service
+	discovery    *discovery.Service
 	agentRuntime AgentRuntime
 	stats        *stats.Service
 	reminders    *reminder.Service
@@ -47,7 +50,7 @@ type handler struct {
 	timelines    *timeline.Service
 }
 
-func NewRouter(leads storage.LeadStore, candidates storage.CandidateStore, leadTimelines storage.LeadTimelineStore, runtime AgentRuntime, statsService *stats.Service, reminderService *reminder.Service, heartbeatService *heartbeat.Service, calendarService *calendar.Service) *gin.Engine {
+func NewRouter(leads storage.LeadStore, candidates storage.CandidateStore, leadTimelines storage.LeadTimelineStore, runtime AgentRuntime, statsService *stats.Service, reminderService *reminder.Service, heartbeatService *heartbeat.Service, calendarService *calendar.Service, discoveryService *discovery.Service) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery(), corsMiddleware())
 
@@ -56,6 +59,7 @@ func NewRouter(leads storage.LeadStore, candidates storage.CandidateStore, leadT
 	h := &handler{
 		leads:        leadService,
 		candidates:   candidate.NewService(candidates, leadService),
+		discovery:    discoveryService,
 		agentRuntime: runtime,
 		stats:        statsService,
 		reminders:    reminderService,
@@ -84,6 +88,13 @@ func NewRouter(leads storage.LeadStore, candidates storage.CandidateStore, leadT
 		api.POST("/candidates/:id/promote", h.promoteCandidate)
 
 		api.GET("/lead-timelines", h.listLeadTimelines)
+
+		discoveryGroup := api.Group("/discovery")
+		discoveryGroup.GET("/rules", h.listDiscoveryRules)
+		discoveryGroup.POST("/rules", h.createDiscoveryRule)
+		discoveryGroup.PATCH("/rules/:id", h.updateDiscoveryRule)
+		discoveryGroup.DELETE("/rules/:id", h.deleteDiscoveryRule)
+		discoveryGroup.POST("/run", h.runDiscoveryNow)
 
 		agent := api.Group("/agent")
 		agent.POST("/chat", h.chatWithAgent)
@@ -303,6 +314,86 @@ func (h *handler) promoteCandidate(c *gin.Context) {
 			"lead":      createdLead,
 		},
 	})
+}
+
+func (h *handler) listDiscoveryRules(c *gin.Context) {
+	if h.discovery == nil {
+		c.JSON(http.StatusOK, gin.H{"data": []model.DiscoveryRule{}})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": h.discovery.ListRules()})
+}
+
+func (h *handler) createDiscoveryRule(c *gin.Context) {
+	if h.discovery == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"message": "discovery service is not configured"})
+		return
+	}
+
+	input, ok := bindDiscoveryRuleInput(c)
+	if !ok {
+		return
+	}
+	created, err := h.discovery.CreateRule(input)
+	if err != nil {
+		respondDiscoveryError(c, "create discovery rule failed", err)
+		return
+	}
+	c.JSON(http.StatusCreated, gin.H{"data": created})
+}
+
+func (h *handler) updateDiscoveryRule(c *gin.Context) {
+	if h.discovery == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"message": "discovery service is not configured"})
+		return
+	}
+
+	input, ok := bindDiscoveryRuleInput(c)
+	if !ok {
+		return
+	}
+	updated, found, err := h.discovery.UpdateRule(c.Param("id"), input)
+	if err != nil {
+		respondDiscoveryError(c, "update discovery rule failed", err)
+		return
+	}
+	if !found {
+		c.JSON(http.StatusNotFound, gin.H{"message": "discovery rule not found"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": updated})
+}
+
+func (h *handler) deleteDiscoveryRule(c *gin.Context) {
+	if h.discovery == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"message": "discovery service is not configured"})
+		return
+	}
+
+	deleted, err := h.discovery.DeleteRule(c.Param("id"))
+	if err != nil {
+		respondDiscoveryError(c, "delete discovery rule failed", err)
+		return
+	}
+	if !deleted {
+		c.JSON(http.StatusNotFound, gin.H{"message": "discovery rule not found"})
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
+func (h *handler) runDiscoveryNow(c *gin.Context) {
+	if h.discovery == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"message": "discovery service is not configured"})
+		return
+	}
+
+	result, err := h.discovery.RunOnce(c.Request.Context(), time.Now().UTC())
+	if err != nil {
+		respondDiscoveryError(c, "run discovery failed", err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": result})
 }
 
 func (h *handler) chatWithAgent(c *gin.Context) {
@@ -680,6 +771,15 @@ func bindCandidateInput(c *gin.Context) (model.CandidateMutationInput, bool) {
 	return input, true
 }
 
+func bindDiscoveryRuleInput(c *gin.Context) (model.DiscoveryRuleMutationInput, bool) {
+	var input model.DiscoveryRuleMutationInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid discovery rule payload", "error": err.Error()})
+		return model.DiscoveryRuleMutationInput{}, false
+	}
+	return input, true
+}
+
 func respondLeadError(c *gin.Context, message string, err error) {
 	if lead.IsValidationError(err) {
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
@@ -703,6 +803,18 @@ func respondCandidateError(c *gin.Context, message string, err error) {
 		return
 	}
 
+	c.JSON(http.StatusInternalServerError, gin.H{"message": message, "error": err.Error()})
+}
+
+func respondDiscoveryError(c *gin.Context, message string, err error) {
+	if discovery.IsValidationError(err) {
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		return
+	}
+	if errors.Is(err, discovery.ErrRuleStoreUnavailable) || errors.Is(err, discovery.ErrCandidateManagerUnavailable) {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"message": err.Error()})
+		return
+	}
 	c.JSON(http.StatusInternalServerError, gin.H{"message": message, "error": err.Error()})
 }
 

@@ -15,6 +15,7 @@ import (
 	"trace2offer/backend/internal/calendar"
 	"trace2offer/backend/internal/candidate"
 	appconfig "trace2offer/backend/internal/config"
+	"trace2offer/backend/internal/discovery"
 	"trace2offer/backend/internal/heartbeat"
 	"trace2offer/backend/internal/lead"
 	"trace2offer/backend/internal/reminder"
@@ -47,6 +48,10 @@ func main() {
 	if err != nil {
 		log.Fatalf("init candidate store failed: %v", err)
 	}
+	discoveryRuleStore, err := storage.NewFileDiscoveryRuleStore(filepath.Join(dataDir, "discovery_rules.json"))
+	if err != nil {
+		log.Fatalf("init discovery rule store failed: %v", err)
+	}
 	leadTimelineStore, err := storage.NewFileLeadTimelineStore(filepath.Join(dataDir, "lead_timelines.json"))
 	if err != nil {
 		log.Fatalf("init lead timeline store failed: %v", err)
@@ -54,14 +59,16 @@ func main() {
 	timelineService := timeline.NewService(leadTimelineStore)
 	leadManager := lead.NewService(leadStore).WithStatusObserver(timelineService)
 	candidateManager := candidate.NewService(candidateStore, leadManager)
+	discoveryService := discovery.NewService(discoveryRuleStore, candidateManager)
 	statsService := stats.NewService(leadStore)
 	reminderService := reminder.NewService(leadStore)
 	calendarService := calendar.NewService(leadStore)
 	heartbeatService, err := heartbeat.NewService(heartbeat.Config{
-		DataDir:         dataDir,
-		Interval:        30 * time.Minute,
-		ReminderService: reminderService,
-		StatsService:    statsService,
+		DataDir:          dataDir,
+		Interval:         30 * time.Minute,
+		ReminderService:  reminderService,
+		StatsService:     statsService,
+		DiscoveryService: discoveryService,
 	})
 	if err != nil {
 		log.Fatalf("init heartbeat service failed: %v", err)
@@ -99,7 +106,7 @@ func main() {
 
 	go heartbeatService.Start(context.Background())
 
-	router := api.NewRouter(leadStore, candidateStore, leadTimelineStore, runtime, statsService, reminderService, heartbeatService, calendarService)
+	router := api.NewRouter(leadStore, candidateStore, leadTimelineStore, runtime, statsService, reminderService, heartbeatService, calendarService, discoveryService)
 	addr := ":" + port
 	log.Printf("trace2offer backend listening on %s", addr)
 	if err := router.Run(addr); err != nil {

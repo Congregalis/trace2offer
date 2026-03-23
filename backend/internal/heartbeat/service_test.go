@@ -93,8 +93,62 @@ func TestServiceStartRunsWithTicker(t *testing.T) {
 	}
 }
 
+func TestServiceRunOnceWithDiscovery(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 3, 23, 9, 0, 0, 0, time.UTC)
+	repo := &stubLeadRepo{}
+	reminderService := reminder.NewService(repo)
+	statsService := stats.NewService(repo)
+	discoveryRunner := &stubDiscoveryRunner{
+		result: model.DiscoveryRunResult{
+			RanAt:             now.Format(time.RFC3339),
+			CandidatesCreated: 2,
+			CandidatesUpdated: 1,
+			Errors:            []string{"one failed"},
+		},
+	}
+
+	service, err := NewService(Config{
+		DataDir:          t.TempDir(),
+		Interval:         30 * time.Minute,
+		ReminderService:  reminderService,
+		StatsService:     statsService,
+		DiscoveryService: discoveryRunner,
+	})
+	if err != nil {
+		t.Fatalf("new heartbeat service failed: %v", err)
+	}
+
+	if err := service.RunOnce(now); err != nil {
+		t.Fatalf("run once failed: %v", err)
+	}
+
+	if discoveryRunner.callCount != 1 {
+		t.Fatalf("expected discovery runner called once, got %d", discoveryRunner.callCount)
+	}
+	status := service.GetStatus()
+	if status.LastDiscoveryCreated != 2 || status.LastDiscoveryUpdated != 1 {
+		t.Fatalf("unexpected discovery status: %+v", status)
+	}
+	if status.LastDiscoveryErrors != 1 {
+		t.Fatalf("expected discovery errors=1, got %d", status.LastDiscoveryErrors)
+	}
+}
+
 type stubLeadRepo struct {
 	leads []model.Lead
+}
+
+type stubDiscoveryRunner struct {
+	result    model.DiscoveryRunResult
+	err       error
+	callCount int
+}
+
+func (s *stubDiscoveryRunner) RunOnce(_ context.Context, _ time.Time) (model.DiscoveryRunResult, error) {
+	s.callCount++
+	return s.result, s.err
 }
 
 func (s *stubLeadRepo) List() []model.Lead {

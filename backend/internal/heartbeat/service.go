@@ -11,25 +11,35 @@ import (
 	"sync"
 	"time"
 
+	"trace2offer/backend/internal/model"
 	"trace2offer/backend/internal/reminder"
 	"trace2offer/backend/internal/stats"
 )
+
+type DiscoveryRunner interface {
+	RunOnce(ctx context.Context, now time.Time) (model.DiscoveryRunResult, error)
+}
 
 type Config struct {
 	DataDir          string
 	Interval         time.Duration
 	ReminderService  *reminder.Service
 	StatsService     *stats.Service
+	DiscoveryService DiscoveryRunner
 	StatusFileName   string
 	ReportFolderName string
 }
 
 type Status struct {
-	IntervalMinutes int    `json:"interval_minutes"`
-	LastRunAt       string `json:"last_run_at,omitempty"`
-	NextRunAt       string `json:"next_run_at,omitempty"`
-	LastDueCount    int    `json:"last_due_count"`
-	LastError       string `json:"last_error,omitempty"`
+	IntervalMinutes      int    `json:"interval_minutes"`
+	LastRunAt            string `json:"last_run_at,omitempty"`
+	NextRunAt            string `json:"next_run_at,omitempty"`
+	LastDueCount         int    `json:"last_due_count"`
+	LastDiscoveryAt      string `json:"last_discovery_at,omitempty"`
+	LastDiscoveryCreated int    `json:"last_discovery_created"`
+	LastDiscoveryUpdated int    `json:"last_discovery_updated"`
+	LastDiscoveryErrors  int    `json:"last_discovery_errors"`
+	LastError            string `json:"last_error,omitempty"`
 }
 
 type Report struct {
@@ -44,6 +54,7 @@ type Report struct {
 type Service struct {
 	reminders *reminder.Service
 	stats     *stats.Service
+	discovery DiscoveryRunner
 	interval  time.Duration
 	status    Status
 
@@ -88,6 +99,7 @@ func NewService(config Config) (*Service, error) {
 	service := &Service{
 		reminders:  config.ReminderService,
 		stats:      config.StatsService,
+		discovery:  config.DiscoveryService,
 		interval:   interval,
 		statusPath: statusPath,
 		reportDir:  reportDir,
@@ -128,20 +140,30 @@ func (s *Service) RunOnce(now time.Time) error {
 	now = now.UTC()
 	dueItems := s.reminders.GetDueAt(now)
 	summary := s.stats.GetSummary()
+	var discoveryResult *model.DiscoveryRunResult
+
+	if s.discovery != nil {
+		result, err := s.discovery.RunOnce(context.Background(), now)
+		discoveryResult = &result
+		if err != nil {
+			s.updateStatus(now, len(dueItems), discoveryResult, err)
+			return err
+		}
+	}
 
 	dailyReport := s.buildDailyReport(now, summary, dueItems)
 	weeklyReport := s.buildWeeklyReport(now, summary, dueItems)
 
 	if err := s.writeReport(dailyReport); err != nil {
-		s.updateStatus(now, len(dueItems), err)
+		s.updateStatus(now, len(dueItems), discoveryResult, err)
 		return err
 	}
 	if err := s.writeReport(weeklyReport); err != nil {
-		s.updateStatus(now, len(dueItems), err)
+		s.updateStatus(now, len(dueItems), discoveryResult, err)
 		return err
 	}
 
-	s.updateStatus(now, len(dueItems), nil)
+	s.updateStatus(now, len(dueItems), discoveryResult, nil)
 	return nil
 }
 
@@ -262,7 +284,7 @@ func (s *Service) writeReport(report Report) error {
 	return nil
 }
 
-func (s *Service) updateStatus(now time.Time, dueCount int, runErr error) {
+func (s *Service) updateStatus(now time.Time, dueCount int, discoveryResult *model.DiscoveryRunResult, runErr error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -270,6 +292,12 @@ func (s *Service) updateStatus(now time.Time, dueCount int, runErr error) {
 	s.status.LastRunAt = now.Format(time.RFC3339)
 	s.status.NextRunAt = now.Add(s.interval).Format(time.RFC3339)
 	s.status.LastDueCount = dueCount
+	if discoveryResult != nil {
+		s.status.LastDiscoveryAt = discoveryResult.RanAt
+		s.status.LastDiscoveryCreated = discoveryResult.CandidatesCreated
+		s.status.LastDiscoveryUpdated = discoveryResult.CandidatesUpdated
+		s.status.LastDiscoveryErrors = len(discoveryResult.Errors)
+	}
 	if runErr != nil {
 		s.status.LastError = runErr.Error()
 	} else {

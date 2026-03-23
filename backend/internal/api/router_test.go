@@ -13,6 +13,8 @@ import (
 
 	agentruntime "trace2offer/backend/agent"
 	"trace2offer/backend/internal/calendar"
+	"trace2offer/backend/internal/candidate"
+	"trace2offer/backend/internal/discovery"
 	"trace2offer/backend/internal/heartbeat"
 	"trace2offer/backend/internal/model"
 	"trace2offer/backend/internal/reminder"
@@ -32,23 +34,45 @@ func TestLeadAndChatAPI(t *testing.T) {
 	if err != nil {
 		t.Fatalf("init candidate store: %v", err)
 	}
+	discoveryRuleStore, err := storage.NewFileDiscoveryRuleStore(filepath.Join(tmpDir, "discovery_rules.json"))
+	if err != nil {
+		t.Fatalf("init discovery rule store: %v", err)
+	}
 	leadTimelineStore, err := storage.NewFileLeadTimelineStore(filepath.Join(tmpDir, "lead_timelines.json"))
 	if err != nil {
 		t.Fatalf("init lead timeline store: %v", err)
 	}
+	discoveryService := discovery.NewService(discoveryRuleStore, candidate.NewService(candidateStore, nil))
 	statsService := stats.NewService(leadStore)
 	reminderService := reminder.NewService(leadStore)
 	heartbeatService, err := heartbeat.NewService(heartbeat.Config{
-		DataDir:         tmpDir,
-		ReminderService: reminderService,
-		StatsService:    statsService,
+		DataDir:          tmpDir,
+		ReminderService:  reminderService,
+		StatsService:     statsService,
+		DiscoveryService: discoveryService,
 	})
 	if err != nil {
 		t.Fatalf("init heartbeat service: %v", err)
 	}
 	_ = heartbeatService.RunOnce(time.Now().UTC())
 
-	router := NewRouter(leadStore, candidateStore, leadTimelineStore, &stubAgentRuntime{}, statsService, reminderService, heartbeatService, calendar.NewService(leadStore))
+	feedServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/rss+xml")
+		_, _ = w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Jobs</title>
+    <item>
+      <title>Backend Engineer at Example</title>
+      <link>https://jobs.example.com/backend-1?utm_source=rss</link>
+      <description>Go distributed systems cloud platform</description>
+    </item>
+  </channel>
+</rss>`))
+	}))
+	defer feedServer.Close()
+
+	router := NewRouter(leadStore, candidateStore, leadTimelineStore, &stubAgentRuntime{}, statsService, reminderService, heartbeatService, calendar.NewService(leadStore), discoveryService)
 
 	resp := doJSONRequest(t, router, http.MethodGet, "/api/leads", nil)
 	if resp.Code != http.StatusOK {
@@ -293,6 +317,70 @@ func TestLeadAndChatAPI(t *testing.T) {
 	resp = doJSONRequest(t, router, http.MethodDelete, "/api/candidates/"+candidateID, nil)
 	if resp.Code != http.StatusNoContent {
 		t.Fatalf("DELETE /api/candidates/:id status=%d body=%s", resp.Code, resp.Body.String())
+	}
+
+	discoveryCreateReq := map[string]any{
+		"name":             "example jobs",
+		"feed_url":         feedServer.URL,
+		"source":           "rss:example",
+		"default_location": "Remote",
+		"include_keywords": []string{"go", "backend"},
+		"exclude_keywords": []string{"intern"},
+		"enabled":          true,
+	}
+	resp = doJSONRequest(t, router, http.MethodPost, "/api/discovery/rules", discoveryCreateReq)
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("POST /api/discovery/rules status=%d body=%s", resp.Code, resp.Body.String())
+	}
+	var discoveryCreatePayload struct {
+		Data model.DiscoveryRule `json:"data"`
+	}
+	decodeJSONBody(t, resp, &discoveryCreatePayload)
+	if discoveryCreatePayload.Data.ID == "" {
+		t.Fatal("created discovery rule id should not be empty")
+	}
+	discoveryRuleID := discoveryCreatePayload.Data.ID
+
+	resp = doJSONRequest(t, router, http.MethodGet, "/api/discovery/rules", nil)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("GET /api/discovery/rules status=%d body=%s", resp.Code, resp.Body.String())
+	}
+	var discoveryListPayload struct {
+		Data []model.DiscoveryRule `json:"data"`
+	}
+	decodeJSONBody(t, resp, &discoveryListPayload)
+	if len(discoveryListPayload.Data) == 0 {
+		t.Fatal("expected discovery rules not empty")
+	}
+
+	resp = doJSONRequest(t, router, http.MethodPost, "/api/discovery/run", nil)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("POST /api/discovery/run status=%d body=%s", resp.Code, resp.Body.String())
+	}
+	var discoveryRunPayload struct {
+		Data model.DiscoveryRunResult `json:"data"`
+	}
+	decodeJSONBody(t, resp, &discoveryRunPayload)
+	if discoveryRunPayload.Data.RulesExecuted == 0 {
+		t.Fatalf("expected discovery rules executed > 0, got %+v", discoveryRunPayload.Data)
+	}
+
+	discoveryUpdateReq := map[string]any{
+		"name":             "example jobs disabled",
+		"feed_url":         feedServer.URL,
+		"source":           "rss:example",
+		"default_location": "Remote",
+		"include_keywords": []string{"go"},
+		"enabled":          false,
+	}
+	resp = doJSONRequest(t, router, http.MethodPatch, "/api/discovery/rules/"+discoveryRuleID, discoveryUpdateReq)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("PATCH /api/discovery/rules/:id status=%d body=%s", resp.Code, resp.Body.String())
+	}
+
+	resp = doJSONRequest(t, router, http.MethodDelete, "/api/discovery/rules/"+discoveryRuleID, nil)
+	if resp.Code != http.StatusNoContent {
+		t.Fatalf("DELETE /api/discovery/rules/:id status=%d body=%s", resp.Code, resp.Body.String())
 	}
 
 	resp = doJSONRequest(t, router, http.MethodGet, "/api/lead-timelines", nil)
