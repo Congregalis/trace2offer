@@ -10,6 +10,7 @@ import (
 	"unicode/utf8"
 
 	"trace2offer/backend/agent/tool"
+	"trace2offer/backend/internal/candidate"
 	"trace2offer/backend/internal/lead"
 )
 
@@ -22,6 +23,7 @@ type ManagedRuntimeConfig struct {
 	MemoryDataPath      string
 	UserProfileDataPath string
 	LeadManager         lead.Manager
+	CandidateManager    candidate.Manager
 	StatsProvider       tool.StatsSummaryProvider
 	Defaults            RuntimeSettings
 }
@@ -34,10 +36,11 @@ type ManagedRuntime struct {
 	runtime      *Runtime
 	userProfiles *UserProfileManager
 
-	sessionDataPath string
-	memoryDataPath  string
-	leadManager     lead.Manager
-	statsProvider   tool.StatsSummaryProvider
+	sessionDataPath  string
+	memoryDataPath   string
+	leadManager      lead.Manager
+	candidateManager candidate.Manager
+	statsProvider    tool.StatsSummaryProvider
 }
 
 func NewManagedRuntime(config ManagedRuntimeConfig) (*ManagedRuntime, error) {
@@ -77,13 +80,14 @@ func NewManagedRuntime(config ManagedRuntimeConfig) (*ManagedRuntime, error) {
 	}
 
 	manager := &ManagedRuntime{
-		store:           store,
-		settings:        settings,
-		sessionDataPath: config.SessionDataPath,
-		memoryDataPath:  config.MemoryDataPath,
-		leadManager:     config.LeadManager,
-		statsProvider:   config.StatsProvider,
-		userProfiles:    profileManager,
+		store:            store,
+		settings:         settings,
+		sessionDataPath:  config.SessionDataPath,
+		memoryDataPath:   config.MemoryDataPath,
+		leadManager:      config.LeadManager,
+		candidateManager: config.CandidateManager,
+		statsProvider:    config.StatsProvider,
+		userProfiles:     profileManager,
 	}
 
 	runtime, err := manager.buildRuntime(settings)
@@ -255,10 +259,11 @@ func (m *ManagedRuntime) ImportUserProfileFromResume(ctx context.Context, source
 
 func (m *ManagedRuntime) buildRuntime(settings RuntimeSettings) (*Runtime, error) {
 	return NewDefaultRuntime(BootstrapConfig{
-		SessionDataPath: m.sessionDataPath,
-		MemoryDataPath:  m.memoryDataPath,
-		LeadManager:     m.leadManager,
-		StatsProvider:   m.statsProvider,
+		SessionDataPath:  m.sessionDataPath,
+		MemoryDataPath:   m.memoryDataPath,
+		LeadManager:      m.leadManager,
+		CandidateManager: m.candidateManager,
+		StatsProvider:    m.statsProvider,
 		AgentConfig: Config{
 			Model:        settings.Model,
 			MaxSteps:     settings.MaxSteps,

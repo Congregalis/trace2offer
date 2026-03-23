@@ -13,6 +13,7 @@ import (
 	"trace2offer/backend/agent"
 	"trace2offer/backend/internal/api"
 	"trace2offer/backend/internal/calendar"
+	"trace2offer/backend/internal/candidate"
 	appconfig "trace2offer/backend/internal/config"
 	"trace2offer/backend/internal/heartbeat"
 	"trace2offer/backend/internal/lead"
@@ -52,6 +53,7 @@ func main() {
 	}
 	timelineService := timeline.NewService(leadTimelineStore)
 	leadManager := lead.NewService(leadStore).WithStatusObserver(timelineService)
+	candidateManager := candidate.NewService(candidateStore, leadManager)
 	statsService := stats.NewService(leadStore)
 	reminderService := reminder.NewService(leadStore)
 	calendarService := calendar.NewService(leadStore)
@@ -80,6 +82,7 @@ func main() {
 		MemoryDataPath:      getenv("T2O_AGENT_MEMORY_DATA", filepath.Join(dataDir, "agent_memory.json")),
 		UserProfileDataPath: getenv("T2O_AGENT_USER_PROFILE_DATA", filepath.Join(dataDir, "user_profile.json")),
 		LeadManager:         leadManager,
+		CandidateManager:    candidateManager,
 		StatsProvider:       statsService,
 		Defaults: agent.RuntimeSettings{
 			Model:                model,

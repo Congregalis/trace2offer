@@ -39,6 +39,8 @@ func DefaultConfig() Config {
 【工具选择建议】
 - 搜索线索 → 用 lead_search（支持状态、公司、优先级筛选）
 - 创建线索 → 用 lead_create 或 lead_create_from_jd_url
+- 管理候选池 → 用 candidate_list / candidate_create / candidate_update / candidate_delete
+- 候选转线索 → 用 candidate_promote
 - 查看统计 → 用 stats_summary 或 job_search_strategy
 - 复杂推理 → 用 think（分析、对比、制定策略时使用）
 

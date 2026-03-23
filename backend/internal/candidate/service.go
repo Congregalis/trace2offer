@@ -44,6 +44,15 @@ type Repository interface {
 	Delete(id string) (bool, error)
 }
 
+// Manager is the reusable candidate contract shared by API and Agent tools.
+type Manager interface {
+	List() []model.Candidate
+	Create(input model.CandidateMutationInput) (model.Candidate, error)
+	Update(id string, input model.CandidateMutationInput) (model.Candidate, bool, error)
+	Delete(id string) (bool, error)
+	Promote(id string, input model.CandidatePromoteInput) (model.Candidate, model.Lead, error)
+}
+
 // Service holds candidate business rules and normalization.
 type Service struct {
 	repo        Repository

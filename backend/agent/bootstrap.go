@@ -10,21 +10,23 @@ import (
 	"trace2offer/backend/agent/provider/openai"
 	"trace2offer/backend/agent/session"
 	"trace2offer/backend/agent/tool"
+	"trace2offer/backend/internal/candidate"
 	"trace2offer/backend/internal/lead"
 )
 
 // BootstrapConfig wires minimal runtime dependencies.
 type BootstrapConfig struct {
-	SessionDataPath string
-	MemoryDataPath  string
-	LeadManager     lead.Manager
-	StatsProvider   tool.StatsSummaryProvider
-	UserProfiles    *UserProfileManager
-	AgentConfig     Config
-	OpenAIAPIKey    string
-	OpenAIModel     string
-	OpenAIBaseURL   string
-	OpenAITimeout   time.Duration
+	SessionDataPath  string
+	MemoryDataPath   string
+	LeadManager      lead.Manager
+	CandidateManager candidate.Manager
+	StatsProvider    tool.StatsSummaryProvider
+	UserProfiles     *UserProfileManager
+	AgentConfig      Config
+	OpenAIAPIKey     string
+	OpenAIModel      string
+	OpenAIBaseURL    string
+	OpenAITimeout    time.Duration
 }
 
 // NewDefaultRuntime builds a minimal runtime with OpenAI Responses provider.
@@ -69,15 +71,17 @@ func NewDefaultRuntime(config BootstrapConfig) (*Runtime, error) {
 
 	extractor := tool.NewLLMJDExtractor(modelProvider, strings.TrimSpace(config.OpenAIModel))
 	leadTools := tool.NewLeadCRUDTools(config.LeadManager, tool.WithJDExtractor(extractor))
-	
+	candidateTools := tool.NewCandidateCRUDTools(config.CandidateManager)
+
 	// Search tools (semantic lead search)
 	searchTools := []tool.Tool{&tool.SearchLeadsTool{Manager: config.LeadManager}}
-	
+
 	// Think tool (for complex reasoning)
 	thinkTools := []tool.Tool{&tool.ThinkTool{}}
-	
+
 	allTools := make([]tool.Tool, 0)
 	allTools = append(allTools, leadTools...)
+	allTools = append(allTools, candidateTools...)
 	allTools = append(allTools, searchTools...)
 	allTools = append(allTools, thinkTools...)
 	allTools = append(allTools, tool.NewInsightTools(config.StatsProvider)...)
