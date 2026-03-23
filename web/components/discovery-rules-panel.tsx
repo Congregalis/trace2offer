@@ -199,150 +199,152 @@ export function DiscoveryRulesPanel({ onDiscoveryFinished }: { onDiscoveryFinish
       </div>
 
       <Dialog open={isManageOpen} onOpenChange={setIsManageOpen}>
-        <DialogContent className="max-w-5xl">
-          <DialogHeader>
-            <DialogTitle>发现规则管理</DialogTitle>
-            <DialogDescription>配置职位来源与关键词，控制候选池自动发现行为。</DialogDescription>
-          </DialogHeader>
+        <DialogContent className="max-h-[calc(100vh-2rem)] max-w-6xl overflow-hidden p-0">
+          <div className="max-h-[calc(100vh-2rem)] overflow-y-auto p-6">
+            <DialogHeader>
+              <DialogTitle>发现规则管理</DialogTitle>
+              <DialogDescription>配置职位来源与关键词，控制候选池自动发现行为。</DialogDescription>
+            </DialogHeader>
 
-          <div className="space-y-4">
-            <div className="space-y-3 rounded-lg border border-border p-3">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <div className="text-sm font-medium">{editingRule ? "编辑规则" : "新建规则"}</div>
-                <div className="flex items-center gap-3">
-                  {editingRule ? (
-                    <Button size="sm" variant="ghost" onClick={resetEditor}>
-                      取消编辑
+            <div className="mt-4 space-y-4">
+              <div className="space-y-3 rounded-lg border border-border p-3">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="text-sm font-medium">{editingRule ? "编辑规则" : "新建规则"}</div>
+                  <div className="flex items-center gap-3">
+                    {editingRule ? (
+                      <Button size="sm" variant="ghost" onClick={resetEditor}>
+                        取消编辑
+                      </Button>
+                    ) : null}
+                    <Button asChild variant="link" size="sm" className="h-auto px-0 text-xs">
+                      <Link href="/docs/discovery-rules" target="_blank" rel="noreferrer">
+                        不会填？看快速上手
+                      </Link>
                     </Button>
-                  ) : null}
-                  <Button asChild variant="link" size="sm" className="h-auto px-0 text-xs">
-                    <Link href="/docs/discovery-rules" target="_blank" rel="noreferrer">
-                      不会填？看快速上手
-                    </Link>
-                  </Button>
+                  </div>
                 </div>
+
+                <FieldGroup>
+                  <Field>
+                    <FieldLabel>规则名</FieldLabel>
+                    <Input value={ruleForm.name} onChange={(e) => setRuleForm((prev) => ({ ...prev, name: e.target.value }))} />
+                  </Field>
+                  <Field>
+                    <FieldLabel>RSS/Atom URL</FieldLabel>
+                    <Input value={ruleForm.feedUrl} onChange={(e) => setRuleForm((prev) => ({ ...prev, feedUrl: e.target.value }))} />
+                  </Field>
+                  <Field>
+                    <FieldLabel>来源标签</FieldLabel>
+                    <Input value={ruleForm.source} onChange={(e) => setRuleForm((prev) => ({ ...prev, source: e.target.value }))} />
+                  </Field>
+                  <Field>
+                    <FieldLabel>默认地区</FieldLabel>
+                    <Input
+                      value={ruleForm.defaultLocation}
+                      onChange={(e) => setRuleForm((prev) => ({ ...prev, defaultLocation: e.target.value }))}
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel>包含关键词（逗号/换行分隔）</FieldLabel>
+                    <Textarea value={includeKeywordsInput} onChange={(e) => setIncludeKeywordsInput(e.target.value)} rows={3} />
+                  </Field>
+                  <Field>
+                    <FieldLabel>排除关键词（逗号/换行分隔）</FieldLabel>
+                    <Textarea value={excludeKeywordsInput} onChange={(e) => setExcludeKeywordsInput(e.target.value)} rows={3} />
+                  </Field>
+                  <Field>
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={ruleForm.enabled}
+                        onChange={(e) => setRuleForm((prev) => ({ ...prev, enabled: e.target.checked }))}
+                      />
+                      启用规则
+                    </label>
+                  </Field>
+                </FieldGroup>
+
+                <Button onClick={() => void handleSubmitRule()} disabled={isSyncing || isRunning} className="w-full">
+                  <Plus className="mr-2 h-4 w-4" />
+                  {editingRule ? "保存规则" : "创建规则"}
+                </Button>
               </div>
 
-              <FieldGroup>
-                <Field>
-                  <FieldLabel>规则名</FieldLabel>
-                  <Input value={ruleForm.name} onChange={(e) => setRuleForm((prev) => ({ ...prev, name: e.target.value }))} />
-                </Field>
-                <Field>
-                  <FieldLabel>RSS/Atom URL</FieldLabel>
-                  <Input value={ruleForm.feedUrl} onChange={(e) => setRuleForm((prev) => ({ ...prev, feedUrl: e.target.value }))} />
-                </Field>
-                <Field>
-                  <FieldLabel>来源标签</FieldLabel>
-                  <Input value={ruleForm.source} onChange={(e) => setRuleForm((prev) => ({ ...prev, source: e.target.value }))} />
-                </Field>
-                <Field>
-                  <FieldLabel>默认地区</FieldLabel>
-                  <Input
-                    value={ruleForm.defaultLocation}
-                    onChange={(e) => setRuleForm((prev) => ({ ...prev, defaultLocation: e.target.value }))}
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel>包含关键词（逗号/换行分隔）</FieldLabel>
-                  <Textarea value={includeKeywordsInput} onChange={(e) => setIncludeKeywordsInput(e.target.value)} rows={3} />
-                </Field>
-                <Field>
-                  <FieldLabel>排除关键词（逗号/换行分隔）</FieldLabel>
-                  <Textarea value={excludeKeywordsInput} onChange={(e) => setExcludeKeywordsInput(e.target.value)} rows={3} />
-                </Field>
-                <Field>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={ruleForm.enabled}
-                      onChange={(e) => setRuleForm((prev) => ({ ...prev, enabled: e.target.checked }))}
-                    />
-                    启用规则
-                  </label>
-                </Field>
-              </FieldGroup>
+              {rules.length === 0 ? (
+                <DiscoveryPresetCards
+                  rules={rules}
+                  onAddPreset={handleAddPreset}
+                  isBusy={isSyncing || isRunning}
+                  title="快速开始"
+                  description="第一次没有规则时，先加一条推荐示例，再点“立即发现”。候选池本身就只负责展示候选。"
+                />
+              ) : null}
 
-              <Button onClick={() => void handleSubmitRule()} disabled={isSyncing || isRunning} className="w-full">
-                <Plus className="mr-2 h-4 w-4" />
-                {editingRule ? "保存规则" : "创建规则"}
-              </Button>
-            </div>
-
-            {rules.length === 0 ? (
-              <DiscoveryPresetCards
-                rules={rules}
-                onAddPreset={handleAddPreset}
-                isBusy={isSyncing || isRunning}
-                title="快速开始"
-                description="第一次没有规则时，先加一条推荐示例，再点“立即发现”。候选池本身就只负责展示候选。"
-              />
-            ) : null}
-
-            <div className="overflow-hidden rounded-lg border border-border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>规则</TableHead>
-                    <TableHead>来源</TableHead>
-                    <TableHead>关键词</TableHead>
-                    <TableHead>状态</TableHead>
-                    <TableHead className="text-right">操作</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {rules.length === 0 ? (
+              <div className="overflow-hidden rounded-lg border border-border">
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
-                        暂无规则，先从上面的推荐示例开始。
-                      </TableCell>
+                      <TableHead>规则</TableHead>
+                      <TableHead>来源</TableHead>
+                      <TableHead>关键词</TableHead>
+                      <TableHead>状态</TableHead>
+                      <TableHead className="text-right">操作</TableHead>
                     </TableRow>
-                  ) : (
-                    rules.map((rule) => (
-                      <TableRow key={rule.id}>
-                        <TableCell className="align-top">
-                          <div className="font-medium">{rule.name}</div>
-                          <div className="line-clamp-1 text-xs text-muted-foreground">{rule.feedUrl}</div>
-                        </TableCell>
-                        <TableCell className="align-top text-sm text-muted-foreground">{rule.source || "-"}</TableCell>
-                        <TableCell className="align-top">
-                          <div className="text-xs text-muted-foreground">
-                            + {rule.includeKeywords.join(", ") || "-"}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            - {rule.excludeKeywords.join(", ") || "-"}
-                          </div>
-                        </TableCell>
-                        <TableCell className="align-top">
-                          <Badge variant={rule.enabled ? "default" : "secondary"}>
-                            {rule.enabled ? "启用" : "停用"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="align-top text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <Button size="sm" variant="outline" onClick={() => beginEdit(rule)} disabled={isSyncing || isRunning}>
-                              <Pencil className="mr-1 h-3.5 w-3.5" />
-                              编辑
-                            </Button>
-                            <Button size="sm" variant="outline" onClick={() => void handleToggleRule(rule)} disabled={isSyncing || isRunning}>
-                              {rule.enabled ? "停用" : "启用"}
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              onClick={() => void handleDeleteRule(rule.id)}
-                              disabled={isSyncing || isRunning}
-                            >
-                              <Trash2 className="mr-1 h-3.5 w-3.5" />
-                              删除
-                            </Button>
-                          </div>
+                  </TableHeader>
+                  <TableBody>
+                    {rules.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
+                          暂无规则，先从上面的推荐示例开始。
                         </TableCell>
                       </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
+                    ) : (
+                      rules.map((rule) => (
+                        <TableRow key={rule.id}>
+                          <TableCell className="align-top">
+                            <div className="font-medium">{rule.name}</div>
+                            <div className="line-clamp-1 text-xs text-muted-foreground">{rule.feedUrl}</div>
+                          </TableCell>
+                          <TableCell className="align-top text-sm text-muted-foreground">{rule.source || "-"}</TableCell>
+                          <TableCell className="align-top">
+                            <div className="text-xs text-muted-foreground">
+                              + {rule.includeKeywords.join(", ") || "-"}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              - {rule.excludeKeywords.join(", ") || "-"}
+                            </div>
+                          </TableCell>
+                          <TableCell className="align-top">
+                            <Badge variant={rule.enabled ? "default" : "secondary"}>
+                              {rule.enabled ? "启用" : "停用"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="align-top text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <Button size="sm" variant="outline" onClick={() => beginEdit(rule)} disabled={isSyncing || isRunning}>
+                                <Pencil className="mr-1 h-3.5 w-3.5" />
+                                编辑
+                              </Button>
+                              <Button size="sm" variant="outline" onClick={() => void handleToggleRule(rule)} disabled={isSyncing || isRunning}>
+                                {rule.enabled ? "停用" : "启用"}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => void handleDeleteRule(rule.id)}
+                                disabled={isSyncing || isRunning}
+                              >
+                                <Trash2 className="mr-1 h-3.5 w-3.5" />
+                                删除
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
             </div>
           </div>
         </DialogContent>
