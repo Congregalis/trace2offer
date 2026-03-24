@@ -1,12 +1,10 @@
 import Link from "next/link";
-import { Nav } from "@/components/nav";
 import { DiscoveryQuickstartContent } from "@/components/discovery-quickstart-content";
 import { Button } from "@/components/ui/button";
 
 export default function DiscoveryRulesDocsPage() {
   return (
-    <div className="min-h-screen bg-background">
-      <Nav />
+    <div className="bg-background">
       <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
         <div className="space-y-6">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

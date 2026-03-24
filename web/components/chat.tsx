@@ -28,6 +28,8 @@ import { Send, Bot, User, Sparkles, Settings2, ClipboardList, Plus } from "lucid
 import { toast } from "sonner";
 
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8080").replace(/\/$/, "");
+const DRAFT_SESSION_PREFIX = "draft_";
+const LOCAL_SESSION_PREFIX = "local_";
 
 interface AgentSettingsView {
   model: string;
@@ -176,6 +178,18 @@ const emptyUserProfileForm: UserProfileForm = {
 
 function getAPIURL(path: string): string {
   return `${API_BASE_URL}${path}`;
+}
+
+function createDraftSessionID(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return `${DRAFT_SESSION_PREFIX}${crypto.randomUUID()}`;
+  }
+  return `${DRAFT_SESSION_PREFIX}${Date.now()}_${Math.random().toString(16).slice(2)}`;
+}
+
+function isTransientSessionID(sessionID: string): boolean {
+  const safeID = sessionID.trim();
+  return safeID.startsWith(DRAFT_SESSION_PREFIX) || safeID.startsWith(LOCAL_SESSION_PREFIX);
 }
 
 function toErrorMessage(error: unknown, fallback: string): string {
@@ -403,28 +417,25 @@ export function Chat() {
     });
   }, [replaceSessionMessages]);
 
-  const createSessionOnServer = useCallback(async (activate = true): Promise<string> => {
-    const response = await fetch(getAPIURL("/api/agent/sessions"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-    });
-    if (!response.ok) {
-      throw await parseAPIError(response, "创建会话失败");
+  const ensureDraftSession = useCallback((forceCreate = false): string => {
+    const state = useChatStore.getState();
+    const active = state.sessions.find((item) => item.id === state.activeSessionId) || null;
+    const activeHasUserMessages = Boolean(active?.messages.some((item) => item.role === "user"));
+
+    if (!forceCreate && active && isTransientSessionID(active.id) && !activeHasUserMessages) {
+      setActiveSessionId(active.id);
+      return active.id;
     }
 
-    const payload = (await response.json()) as { data?: AgentSessionView };
-    if (!payload.data?.id) {
-      throw new Error("创建会话失败: 响应缺少 data");
-    }
-
+    const draftID = createDraftSessionID();
     createSession({
-      id: payload.data.id,
-      messages: toClientMessages(payload.data.messages),
-      updatedAt: payload.data.updated_at,
-      activate,
+      id: draftID,
+      title: "新会话",
+      updatedAt: new Date().toISOString(),
+      activate: true,
     });
-    return payload.data.id;
-  }, [createSession]);
+    return draftID;
+  }, [createSession, setActiveSessionId]);
 
   const handleCreateSession = useCallback(async () => {
     if (isSessionCreating || isLoading) {
@@ -433,17 +444,12 @@ export function Chat() {
 
     setIsSessionCreating(true);
     try {
-      const sessionID = await createSessionOnServer(true);
-      await syncSessionFromServer(sessionID, true);
+      ensureDraftSession(true);
       textareaRef.current?.focus();
-    } catch (error) {
-      const fallbackID = `local_${Date.now()}`;
-      createSession({ id: fallbackID, activate: true, updatedAt: new Date().toISOString() });
-      toast.error(toErrorMessage(error, "创建会话失败"));
     } finally {
       setIsSessionCreating(false);
     }
-  }, [createSession, createSessionOnServer, isLoading, isSessionCreating, syncSessionFromServer]);
+  }, [ensureDraftSession, isLoading, isSessionCreating]);
 
   const handleSwitchSession = useCallback(async (targetSessionId: string) => {
     const safeSessionID = targetSessionId.trim();
@@ -452,6 +458,10 @@ export function Chat() {
     }
 
     setActiveSessionId(safeSessionID);
+    if (isTransientSessionID(safeSessionID)) {
+      return;
+    }
+
     setIsSessionSwitching(true);
     try {
       await syncSessionFromServer(safeSessionID, true);
@@ -471,6 +481,7 @@ export function Chat() {
 
     const bootstrap = async () => {
       setIsSessionBootstrapping(true);
+      ensureDraftSession(false);
       try {
         const response = await fetch(getAPIURL("/api/agent/sessions"), {
           method: "GET",
@@ -489,44 +500,10 @@ export function Chat() {
             updatedAt: item.updated_at,
           }))
         );
-
-        const summaryIDSet = new Set(summaries.map((item) => (item.id || "").trim()).filter(Boolean));
-        const fallbackSessionID = activeSessionId || sessions[0]?.id || "";
-        const firstServerSessionID = summaries[0]?.id || "";
-        let targetSessionID = "";
-        let shouldSyncFromServer = true;
-        if (fallbackSessionID && summaryIDSet.has(fallbackSessionID)) {
-          targetSessionID = fallbackSessionID;
-        } else if (firstServerSessionID) {
-          targetSessionID = firstServerSessionID;
-        } else if (fallbackSessionID) {
-          targetSessionID = fallbackSessionID;
-          shouldSyncFromServer = false;
-        }
-
-        if (!targetSessionID) {
-          targetSessionID = await createSessionOnServer(true);
-        } else {
-          setActiveSessionId(targetSessionID);
-        }
-
-        if (!cancelled && targetSessionID && shouldSyncFromServer) {
-          await syncSessionFromServer(targetSessionID, true);
-        }
       } catch (error) {
-        const hasAnySession = sessions.length > 0;
-        if (!hasAnySession) {
-          try {
-            const createdID = await createSessionOnServer(true);
-            if (!cancelled) {
-              await syncSessionFromServer(createdID, true);
-            }
-            return;
-          } catch {
-            createSession({ id: `local_${Date.now()}`, activate: true, updatedAt: new Date().toISOString() });
-          }
+        if (!cancelled) {
+          toast.error(toErrorMessage(error, "加载会话列表失败"));
         }
-        toast.error(toErrorMessage(error, "加载会话列表失败"));
       } finally {
         if (!cancelled) {
           setIsSessionBootstrapping(false);
@@ -544,7 +521,7 @@ export function Chat() {
       cancelled = true;
       setIsSessionBootstrapping(false);
     };
-  }, [hasHydrated]);
+  }, [ensureDraftSession, hasHydrated, mergeSessionSummaries]);
 
   const loadSettings = async () => {
     setIsSettingsLoading(true);
@@ -743,20 +720,16 @@ export function Chat() {
 
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
-    if (!input.trim() || isLoading || isSessionBootstrapping || isSessionSwitching || isSessionCreating) return;
+    if (!input.trim() || isLoading || isSessionSwitching || isSessionCreating) return;
 
     const userMessage = input.trim();
     setInput("");
 
     let currentSessionId = sessionId.trim();
     if (!currentSessionId) {
-      try {
-        await handleCreateSession();
-        currentSessionId = useChatStore.getState().activeSessionId.trim();
-      } catch {
-        // ignore, downstream request will fail with proper toast.
-      }
+      currentSessionId = ensureDraftSession(true);
     }
+    const requestSessionId = isTransientSessionID(currentSessionId) ? "" : currentSessionId;
 
     appendMessageToActiveSession({
       role: "user",
@@ -770,7 +743,7 @@ export function Chat() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          session_id: currentSessionId,
+          session_id: requestSessionId,
           message: userMessage,
           history: [],
         }),
@@ -960,7 +933,7 @@ export function Chat() {
               placeholder="输入消息，让 Agent 帮你管理求职..."
               className="min-h-[52px] max-h-32 resize-none border-border/80 bg-background/74 pr-12 focus-visible:border-primary/70 focus-visible:ring-primary/45"
               rows={1}
-              disabled={isSessionBootstrapping || isSessionSwitching || isSessionCreating || !hasHydrated}
+              disabled={isSessionSwitching || isSessionCreating || !hasHydrated}
             />
             <Button
               type="submit"
@@ -968,7 +941,6 @@ export function Chat() {
               disabled={
                 !input.trim() ||
                 isLoading ||
-                isSessionBootstrapping ||
                 isSessionSwitching ||
                 isSessionCreating ||
                 !hasHydrated

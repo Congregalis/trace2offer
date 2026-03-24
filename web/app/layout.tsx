@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { ThemeProvider } from '@/components/theme-provider'
+import { Nav } from '@/components/nav'
 import { Toaster } from '@/components/ui/sonner'
 import './globals.css'
 
@@ -62,7 +63,10 @@ export default function RootLayout({
       </head>
       <body className="font-sans antialiased">
         <ThemeProvider>
-          {children}
+          <div className="flex min-h-screen flex-col">
+            <Nav />
+            <div className="flex-1 min-h-0">{children}</div>
+          </div>
           <Toaster />
           <Analytics />
         </ThemeProvider>

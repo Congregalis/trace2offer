@@ -254,10 +254,44 @@ header,
   }
 }
 
+@keyframes route-transition-out {
+  0% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(-14px, 0, 0);
+  }
+}
+
+@keyframes route-transition-in {
+  0% {
+    opacity: 0;
+    transform: translate3d(14px, 0, 0);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@supports (view-transition-name: root) {
+  ::view-transition-old(root) {
+    animation: route-transition-out 280ms var(--ease-fluid) both;
+  }
+
+  ::view-transition-new(root) {
+    animation: route-transition-in 320ms var(--ease-fluid) both;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   body::before,
   body::after,
-  .page-enter {
+  .page-enter,
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
     animation: none;
   }
 
