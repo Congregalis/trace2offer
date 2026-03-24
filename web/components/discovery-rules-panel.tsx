@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/table";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Badge } from "@/components/ui/badge";
-import { Layers3, Pencil, Play, Plus, Settings2, Trash2 } from "lucide-react";
+import { Globe2, Pencil, Play, Plus, Settings2, Trash2 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -385,14 +385,26 @@ export function DiscoveryRulesPanel({ onDiscoveryFinished }: { onDiscoveryFinish
                   </div>
 
                   <div className="rounded-lg border border-border bg-card/20 p-4">
-                    <div className="text-sm font-medium text-foreground">国外远程</div>
-                    <p className="mt-1 text-xs text-muted-foreground">偏标准化远程岗位 feed，稳定性通常更好。</p>
+                    <div className="flex items-start gap-3">
+                      <div className="rounded-lg border border-border/80 bg-background/80 p-2">
+                        <Globe2 className="h-4 w-4 text-foreground" />
+                      </div>
+                      <div>
+                        <div className="text-sm font-medium text-foreground">按来源分区</div>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          国外远程更稳定，国内社区更灵活。你可以各挑几条，不用一口气全搬进去。
+                        </p>
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="rounded-lg border border-border bg-card/20 p-4">
-                    <div className="text-sm font-medium text-foreground">国内社区</div>
-                    <p className="mt-1 text-xs text-muted-foreground">偏招聘帖子流，噪音会更高，但能补到国内线索。</p>
-                  </div>
+                  <DiscoveryPresetCards
+                    rules={rules}
+                    onAddPreset={handleAddPreset}
+                    isBusy={isSyncing || isRunning}
+                    title="规则市场"
+                    description="内置规则按来源分成国外远程和国内社区两组，想加哪条就点哪条。"
+                  />
                 </div>
               </TabsContent>
             </Tabs>

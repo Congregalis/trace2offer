@@ -1,6 +1,6 @@
 import type { DiscoveryRule, DiscoveryRuleMutationInput } from "./types";
 
-export type DiscoveryPresetGroup = "priority" | "general";
+export type DiscoveryPresetGroup = "international" | "domestic";
 
 export interface DiscoveryPreset {
   id: string;
@@ -16,8 +16,8 @@ export const DISCOVERY_PRESETS: DiscoveryPreset[] = [
     id: "remoteyeah-ai-engineer",
     name: "RemoteYeah AI Engineer",
     summary: "偏 Agent / LLM / AI Infra，适合先拉高相关性。",
-    group: "priority",
-    tags: ["Remote", "AI", "Agent"],
+    group: "international",
+    tags: ["国外远程", "AI", "Agent"],
     rule: {
       name: "RemoteYeah AI Engineer",
       feedUrl: "https://remoteyeah.com/remote-ai-engineer-jobs.xml",
@@ -32,8 +32,8 @@ export const DISCOVERY_PRESETS: DiscoveryPreset[] = [
     id: "himalayas-remote-swe",
     name: "Himalayas Remote SWE",
     summary: "更宽的远程 Software Engineer 基础盘，适合作为补量入口。",
-    group: "priority",
-    tags: ["Remote", "SWE", "General"],
+    group: "international",
+    tags: ["国外远程", "SWE", "General"],
     rule: {
       name: "Himalayas Remote SWE",
       feedUrl: "https://himalayas.app/jobs/rss",
@@ -48,8 +48,8 @@ export const DISCOVERY_PRESETS: DiscoveryPreset[] = [
     id: "remoteyeah-backend",
     name: "RemoteYeah Backend",
     summary: "补足后端和平台类岗位，把 AI 服务型职位一并兜住。",
-    group: "priority",
-    tags: ["Remote", "Backend", "Platform"],
+    group: "international",
+    tags: ["国外远程", "Backend", "Platform"],
     rule: {
       name: "RemoteYeah Backend",
       feedUrl: "https://remoteyeah.com/remote-back-end-jobs.xml",
@@ -64,8 +64,8 @@ export const DISCOVERY_PRESETS: DiscoveryPreset[] = [
     id: "wwr-backend",
     name: "We Work Remotely Backend",
     summary: "经典远程后端盘子，适合补充更传统的软件工程岗位。",
-    group: "general",
-    tags: ["Remote", "Backend"],
+    group: "international",
+    tags: ["国外远程", "Backend"],
     rule: {
       name: "We Work Remotely Backend",
       feedUrl: "https://weworkremotely.com/categories/remote-back-end-programming-jobs.rss",
@@ -80,8 +80,8 @@ export const DISCOVERY_PRESETS: DiscoveryPreset[] = [
     id: "smartremotejobs-swe",
     name: "SmartRemoteJobs SWE",
     summary: "偏宽的远程软件开发补充源，适合后续扩池。",
-    group: "general",
-    tags: ["Remote", "SWE", "Supplement"],
+    group: "international",
+    tags: ["国外远程", "SWE", "Supplement"],
     rule: {
       name: "SmartRemoteJobs SWE",
       feedUrl: "https://www.smartremotejobs.com/feed/software-development-remote-jobs.rss",
@@ -96,7 +96,7 @@ export const DISCOVERY_PRESETS: DiscoveryPreset[] = [
     id: "v2ex-jobs",
     name: "V2EX 酷工作",
     summary: "国内技术社区里最像样的开发招聘源，适合先接入观察质量。",
-    group: "general",
+    group: "domestic",
     tags: ["国内", "社区", "招聘"],
     rule: {
       name: "V2EX 酷工作",
@@ -112,7 +112,7 @@ export const DISCOVERY_PRESETS: DiscoveryPreset[] = [
     id: "linuxdo-job-category",
     name: "LINUX DO 招聘分类",
     summary: "国内社区招聘分类 RSS，内容更杂，但确实是招聘板块，不是全站资讯。",
-    group: "general",
+    group: "domestic",
     tags: ["国内", "社区", "招聘"],
     rule: {
       name: "LINUX DO 招聘分类",
@@ -128,7 +128,7 @@ export const DISCOVERY_PRESETS: DiscoveryPreset[] = [
     id: "linuxdo-job-tag",
     name: "LINUX DO 招聘标签",
     summary: "比整分类更窄一点的国内社区招聘源，可以作为补充观察。",
-    group: "general",
+    group: "domestic",
     tags: ["国内", "社区", "招聘"],
     rule: {
       name: "LINUX DO 招聘标签",
@@ -144,7 +144,7 @@ export const DISCOVERY_PRESETS: DiscoveryPreset[] = [
     id: "ruby-china-topics",
     name: "Ruby China Topics",
     summary: "全站主题 feed，噪音更大，但偶尔会有全栈/Agent 相关招聘帖。",
-    group: "general",
+    group: "domestic",
     tags: ["国内", "社区", "杂讯"],
     rule: {
       name: "Ruby China Topics",

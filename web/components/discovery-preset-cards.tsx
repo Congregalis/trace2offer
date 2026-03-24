@@ -14,13 +14,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { cn } from "@/lib/utils";
 
 const GROUP_LABELS: Record<DiscoveryPresetGroup, { title: string; description: string }> = {
-  priority: {
-    title: "优先推荐",
-    description: "更贴近 Software Engineer / Agent / AI Infra，适合先加这几条。",
+  international: {
+    title: "国外远程",
+    description: "更标准化的远程岗位 feed，稳定性通常更好，适合作为基础盘。",
   },
-  general: {
-    title: "通用补充",
-    description: "用于补充更宽的软件工程远程岗位，别一上来全加满。",
+  domestic: {
+    title: "国内社区",
+    description: "偏社区招聘帖子流，噪音会更高，但能补到国内线索。",
   },
 };
 
@@ -132,7 +132,7 @@ export function DiscoveryPresetCards({
   onAddPreset,
   onOpenHelp,
   isBusy = false,
-  groups = ["priority", "general"],
+  groups = ["international", "domestic"],
   className,
   title = "推荐示例规则",
   description = "先加一条能跑起来的规则，比盯着空表单发呆强多了。",
@@ -155,8 +155,10 @@ export function DiscoveryPresetCards({
         ) : null}
       </div>
 
-      {groups.includes("priority") ? <PresetGroup group="priority" rules={rules} onAddPreset={onAddPreset} isBusy={isBusy} /> : null}
-      {groups.includes("general") ? <PresetGroup group="general" rules={rules} onAddPreset={onAddPreset} isBusy={isBusy} /> : null}
+      {groups.includes("international") ? (
+        <PresetGroup group="international" rules={rules} onAddPreset={onAddPreset} isBusy={isBusy} />
+      ) : null}
+      {groups.includes("domestic") ? <PresetGroup group="domestic" rules={rules} onAddPreset={onAddPreset} isBusy={isBusy} /> : null}
     </div>
   );
 }

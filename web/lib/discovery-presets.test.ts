@@ -20,5 +20,22 @@ test("domestic discovery presets are explicitly tagged as domestic", () => {
   assert.equal(domesticPresets.length, 4, "expected all domestic presets to exist first");
   for (const preset of domesticPresets) {
     assert.ok(preset.tags.includes("国内"), `expected ${preset.id} tagged as 国内`);
+    assert.equal(preset.group, "domestic", `expected ${preset.id} in domestic group`);
+  }
+});
+
+test("international presets remain grouped under overseas remote market", () => {
+  const internationalPresetIds = [
+    "remoteyeah-ai-engineer",
+    "himalayas-remote-swe",
+    "remoteyeah-backend",
+    "wwr-backend",
+    "smartremotejobs-swe",
+  ];
+
+  const internationalPresets = DISCOVERY_PRESETS.filter((preset) => internationalPresetIds.includes(preset.id));
+  assert.equal(internationalPresets.length, internationalPresetIds.length, "expected all international presets to exist");
+  for (const preset of internationalPresets) {
+    assert.equal(preset.group, "international", `expected ${preset.id} in international group`);
   }
 });
