@@ -105,15 +105,15 @@ export function Nav() {
           <div className="relative flex flex-col gap-4">
             <div className="flex items-start justify-between gap-3">
               <Link href="/" className="group flex min-w-0 items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-primary via-warning to-info text-sm font-black text-primary-foreground shadow-[var(--panel-shadow-strong)] transition-transform duration-500 ease-[var(--ease-fluid)] group-hover:-translate-y-0.5">
-                  T2
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-primary via-warning to-info text-[13px] font-black tracking-tight text-primary-foreground shadow-[var(--panel-shadow-strong)] transition-transform duration-500 ease-[var(--ease-fluid)] group-hover:-translate-y-0.5">
+                  T2O
                 </div>
                 <div className="min-w-0">
                   <span className="block text-sm font-semibold tracking-[0.18em] text-foreground/85 uppercase">
                     Trace2Offer
                   </span>
                   <span className="hidden truncate text-xs text-muted-foreground sm:block">
-                    线索、候选、提醒和 Agent 收在一张桌上
+                    从线索追踪到拿下 Offer
                   </span>
                 </div>
               </Link>
