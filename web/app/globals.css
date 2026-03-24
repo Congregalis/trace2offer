@@ -5,6 +5,7 @@
 
 :root {
   color-scheme: light;
+  --app-nav-height: 176px;
   --background: oklch(0.985 0.01 92);
   --foreground: oklch(0.28 0.03 255);
   --card: oklch(0.995 0.005 95);

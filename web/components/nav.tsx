@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
-import { useEffect, useState, type MouseEvent } from "react";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { cn } from "@/lib/utils";
 import { LayoutGrid, MessageSquare } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -26,10 +26,39 @@ export function Nav() {
   const router = useRouter();
   const pathname = usePathname();
   const [activePath, setActivePath] = useState(pathname);
+  const headerRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     setActivePath(pathname);
   }, [pathname]);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const updateNavHeight = () => {
+      const height = headerRef.current?.offsetHeight || 0;
+      if (height > 0) {
+        root.style.setProperty("--app-nav-height", `${height}px`);
+      }
+    };
+
+    updateNavHeight();
+    const rafID = window.requestAnimationFrame(updateNavHeight);
+    window.addEventListener("resize", updateNavHeight);
+
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined" && headerRef.current) {
+      observer = new ResizeObserver(() => {
+        updateNavHeight();
+      });
+      observer.observe(headerRef.current);
+    }
+
+    return () => {
+      window.cancelAnimationFrame(rafID);
+      window.removeEventListener("resize", updateNavHeight);
+      observer?.disconnect();
+    };
+  }, []);
 
   const navigateWithTransition = (event: MouseEvent<HTMLAnchorElement>, href: string) => {
     if (
@@ -69,7 +98,7 @@ export function Nav() {
   );
 
   return (
-    <header className="sticky top-0 z-50 px-4 pt-4 sm:px-6">
+    <header ref={headerRef} className="sticky top-0 z-50 px-4 pt-4 sm:px-6">
       <div className="mx-auto max-w-7xl">
         <div className="page-enter relative overflow-hidden rounded-[28px] border border-[var(--panel-border)] bg-card/72 px-4 py-4 shadow-[var(--panel-shadow)] backdrop-blur-xl sm:px-5">
           <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-primary/45 to-transparent" />

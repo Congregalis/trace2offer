@@ -800,9 +800,9 @@ export function Chat() {
   ];
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden">
       <div className="border-b border-border/60 bg-background/38 px-4 pb-3 pt-4 backdrop-blur-sm">
-        <div className="max-w-3xl mx-auto flex flex-wrap items-center justify-between gap-2">
+        <div className="mx-auto flex w-full max-w-5xl flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-[220px]">
             <Select
               value={activeSessionId}
@@ -846,8 +846,8 @@ export function Chat() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-4">
-        <div className="max-w-3xl mx-auto space-y-6">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+        <div className="mx-auto w-full max-w-5xl space-y-6">
           {messages.map((message) => (
             <div
               key={message.id}
@@ -900,7 +900,7 @@ export function Chat() {
 
       {messages.length === 1 && (
         <div className="px-4 pb-4">
-          <div className="max-w-3xl mx-auto">
+          <div className="mx-auto w-full max-w-5xl">
             <div className="flex flex-wrap gap-2">
               {quickActions.map((action) => (
                 <Button
@@ -923,7 +923,7 @@ export function Chat() {
       )}
 
       <div className="border-t border-border/60 bg-background/42 p-4 backdrop-blur-sm">
-        <form onSubmit={handleSubmit} className="max-w-3xl mx-auto">
+        <form onSubmit={handleSubmit} className="mx-auto w-full max-w-5xl">
           <div className="relative">
             <Textarea
               ref={textareaRef}
