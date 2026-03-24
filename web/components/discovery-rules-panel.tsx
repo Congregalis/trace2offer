@@ -8,13 +8,12 @@ import { DiscoveryPresetCards } from "@/components/discovery-preset-cards";
 import { useDiscoveryStore } from "@/lib/discovery-store";
 import { Button } from "@/components/ui/button";
 import {
-  Drawer,
-  DrawerClose,
-  DrawerContent,
-  DrawerDescription,
-  DrawerHeader,
-  DrawerTitle,
-} from "@/components/ui/drawer";
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -35,7 +34,6 @@ import {
   Plus,
   Settings2,
   Trash2,
-  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -244,27 +242,21 @@ export function DiscoveryRulesPanel({
         </div>
       </div>
 
-      <Drawer open={isManageOpen} onOpenChange={handleManageOpenChange} direction="right">
-        <DrawerContent className="data-[vaul-drawer-direction=right]:w-[calc(100vw-1rem)] data-[vaul-drawer-direction=right]:sm:max-w-none lg:data-[vaul-drawer-direction=right]:w-[min(1480px,calc(100vw-2rem))]">
-          <div className="flex h-full min-h-0 flex-col">
-            <DrawerHeader className="border-b border-border px-6 py-5">
-              <div className="flex items-start justify-between gap-4">
-                <div className="space-y-1">
-                  <DrawerTitle>发现规则管理</DrawerTitle>
-                  <DrawerDescription>配置职位来源与关键词，并从规则市场挑选内置规则。</DrawerDescription>
-                </div>
-                <DrawerClose asChild>
-                  <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0">
-                    <X className="h-4 w-4" />
-                  </Button>
-                </DrawerClose>
-              </div>
-            </DrawerHeader>
+      <Sheet open={isManageOpen} onOpenChange={handleManageOpenChange}>
+        <SheetContent
+          side="right"
+          className="flex h-full w-[50vw] max-w-none flex-col overflow-hidden p-0 sm:max-w-none"
+        >
+          <div className="flex min-h-0 flex-1 flex-col">
+            <SheetHeader className="border-b border-border px-6 py-5 text-left shrink-0">
+              <SheetTitle>发现规则管理</SheetTitle>
+              <SheetDescription>配置职位来源与关键词，并从规则市场挑选内置规则。</SheetDescription>
+            </SheetHeader>
 
             <Tabs
               value={activeTab}
               onValueChange={(value) => setActiveTab(value as "rules" | "market")}
-              className="min-h-0 flex-1 gap-0"
+              className="flex min-h-0 flex-1 flex-col gap-0"
             >
               <div className="border-b border-border px-6 py-4">
                 <TabsList className="h-10 bg-card/40">
@@ -278,7 +270,7 @@ export function DiscoveryRulesPanel({
               </div>
 
               <TabsContent value="rules" className="min-h-0 flex-1 overflow-auto px-6 py-5">
-                <div className="grid gap-4 2xl:grid-cols-[minmax(0,460px)_minmax(0,1fr)]">
+                <div className="grid gap-4 xl:grid-cols-[minmax(0,400px)_minmax(0,1fr)]">
                   <div className="space-y-3 rounded-lg border border-border bg-card/20 p-4">
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <div className="text-sm font-medium">{editingRule ? "编辑规则" : "新建规则"}</div>
@@ -462,8 +454,8 @@ export function DiscoveryRulesPanel({
               </TabsContent>
             </Tabs>
           </div>
-        </DrawerContent>
-      </Drawer>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

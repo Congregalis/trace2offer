@@ -205,7 +205,7 @@
   }
 }
 
-body > * {
+body > .min-h-screen {
   position: relative;
   z-index: 1;
 }
