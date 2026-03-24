@@ -9,6 +9,7 @@ import { useDiscoveryStore } from "@/lib/discovery-store";
 import { Button } from "@/components/ui/button";
 import {
   Drawer,
+  DrawerClose,
   DrawerContent,
   DrawerDescription,
   DrawerHeader,
@@ -26,8 +27,16 @@ import {
 } from "@/components/ui/table";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Badge } from "@/components/ui/badge";
-import { Globe2, Pencil, Play, Plus, Settings2, Trash2 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Globe2,
+  Pencil,
+  Play,
+  Plus,
+  Settings2,
+  Trash2,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -67,16 +76,30 @@ function formatRunSummary(lastRun: DiscoveryRunResult | null): string {
   return `规则 ${lastRun.rulesExecuted}/${lastRun.rulesTotal} · 抓取 ${lastRun.entriesFetched} · 新增 ${lastRun.candidatesCreated} · 更新 ${lastRun.candidatesUpdated} · 错误 ${lastRun.errors.length}`;
 }
 
-export function DiscoveryRulesPanel({ onDiscoveryFinished }: { onDiscoveryFinished?: (result: DiscoveryRunResult) => Promise<void> | void }) {
-  const { rules, lastRun, isSyncing, isRunning, hasLoaded, fetchRules, addRule, updateRule, deleteRule, runDiscoveryNow } =
-    useDiscoveryStore();
+export function DiscoveryRulesPanel({
+  onDiscoveryFinished,
+}: {
+  onDiscoveryFinished?: (result: DiscoveryRunResult) => Promise<void> | void;
+}) {
+  const {
+    rules,
+    lastRun,
+    isSyncing,
+    isRunning,
+    hasLoaded,
+    fetchRules,
+    addRule,
+    updateRule,
+    deleteRule,
+    runDiscoveryNow,
+  } = useDiscoveryStore();
 
   const [isManageOpen, setIsManageOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<"rules" | "market">("rules");
   const [editingRule, setEditingRule] = useState<DiscoveryRule | null>(null);
   const [ruleForm, setRuleForm] = useState<DiscoveryRuleMutationInput>(EMPTY_RULE);
   const [includeKeywordsInput, setIncludeKeywordsInput] = useState("");
   const [excludeKeywordsInput, setExcludeKeywordsInput] = useState("");
-  const [activeTab, setActiveTab] = useState<"rules" | "market">("rules");
 
   useEffect(() => {
     if (hasLoaded) {
@@ -105,6 +128,15 @@ export function DiscoveryRulesPanel({ onDiscoveryFinished }: { onDiscoveryFinish
     setRuleForm(EMPTY_RULE);
     setIncludeKeywordsInput("");
     setExcludeKeywordsInput("");
+  };
+
+  const handleManageOpenChange = (open: boolean) => {
+    setIsManageOpen(open);
+    if (open) {
+      setActiveTab("rules");
+      return;
+    }
+    resetEditor();
     setActiveTab("rules");
   };
 
@@ -131,6 +163,7 @@ export function DiscoveryRulesPanel({ onDiscoveryFinished }: { onDiscoveryFinish
         toast.success("发现规则已创建");
       }
       resetEditor();
+      await fetchRules();
     } catch (error) {
       const message = error instanceof Error && error.message ? error.message : "保存发现规则失败";
       toast.error(message);
@@ -144,6 +177,7 @@ export function DiscoveryRulesPanel({ onDiscoveryFinished }: { onDiscoveryFinish
         enabled: !rule.enabled,
       });
       toast.success(rule.enabled ? "规则已停用" : "规则已启用");
+      await fetchRules();
     } catch (error) {
       const message = error instanceof Error && error.message ? error.message : "更新规则状态失败";
       toast.error(message);
@@ -157,6 +191,7 @@ export function DiscoveryRulesPanel({ onDiscoveryFinished }: { onDiscoveryFinish
       if (editingRule?.id === id) {
         resetEditor();
       }
+      await fetchRules();
     } catch (error) {
       const message = error instanceof Error && error.message ? error.message : "删除规则失败";
       toast.error(message);
@@ -198,7 +233,7 @@ export function DiscoveryRulesPanel({ onDiscoveryFinished }: { onDiscoveryFinish
           <p className="text-xs text-muted-foreground">{formatRunSummary(lastRun)}</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button size="sm" variant="outline" onClick={() => setIsManageOpen(true)} disabled={isSyncing || isRunning}>
+          <Button size="sm" variant="outline" onClick={() => handleManageOpenChange(true)} disabled={isSyncing || isRunning}>
             <Settings2 className="mr-1 h-3.5 w-3.5" />
             管理规则
           </Button>
@@ -209,15 +244,28 @@ export function DiscoveryRulesPanel({ onDiscoveryFinished }: { onDiscoveryFinish
         </div>
       </div>
 
-      <Drawer open={isManageOpen} onOpenChange={setIsManageOpen} direction="right">
-        <DrawerContent className="data-[vaul-drawer-direction=right]:w-[calc(100vw-1rem)] data-[vaul-drawer-direction=right]:sm:max-w-none lg:data-[vaul-drawer-direction=right]:w-[min(1400px,calc(100vw-2rem))]">
+      <Drawer open={isManageOpen} onOpenChange={handleManageOpenChange} direction="right">
+        <DrawerContent className="data-[vaul-drawer-direction=right]:w-[calc(100vw-1rem)] data-[vaul-drawer-direction=right]:sm:max-w-none lg:data-[vaul-drawer-direction=right]:w-[min(1480px,calc(100vw-2rem))]">
           <div className="flex h-full min-h-0 flex-col">
             <DrawerHeader className="border-b border-border px-6 py-5">
-              <DrawerTitle>发现规则管理</DrawerTitle>
-              <DrawerDescription>配置职位来源与关键词，并从规则市场挑选内置规则。</DrawerDescription>
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-1">
+                  <DrawerTitle>发现规则管理</DrawerTitle>
+                  <DrawerDescription>配置职位来源与关键词，并从规则市场挑选内置规则。</DrawerDescription>
+                </div>
+                <DrawerClose asChild>
+                  <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0">
+                    <X className="h-4 w-4" />
+                  </Button>
+                </DrawerClose>
+              </div>
             </DrawerHeader>
 
-            <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "rules" | "market")} className="min-h-0 flex-1 gap-0">
+            <Tabs
+              value={activeTab}
+              onValueChange={(value) => setActiveTab(value as "rules" | "market")}
+              className="min-h-0 flex-1 gap-0"
+            >
               <div className="border-b border-border px-6 py-4">
                 <TabsList className="h-10 bg-card/40">
                   <TabsTrigger value="rules" className="min-w-28">
@@ -316,7 +364,12 @@ export function DiscoveryRulesPanel({ onDiscoveryFinished }: { onDiscoveryFinish
                           {rules.length === 0 ? (
                             <TableRow>
                               <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
-                                还没有规则，去规则市场挑一条。
+                                <div className="space-y-3">
+                                  <div>还没有规则，去规则市场挑一条。</div>
+                                  <Button size="sm" variant="outline" onClick={() => setActiveTab("market")}>
+                                    去规则市场
+                                  </Button>
+                                </div>
                               </TableCell>
                             </TableRow>
                           ) : (
@@ -375,7 +428,7 @@ export function DiscoveryRulesPanel({ onDiscoveryFinished }: { onDiscoveryFinish
                   <div className="flex items-center justify-between rounded-lg border border-border bg-card/20 px-4 py-3">
                     <div>
                       <div className="text-sm font-medium text-foreground">规则市场</div>
-                      <p className="mt-1 text-xs text-muted-foreground">把内置规则当成货架来挑，先加能跑起来的，再逐步扩充。</p>
+                      <p className="mt-1 text-xs text-muted-foreground">国外远程和国内社区规则都在这里，挑中后直接一键添加。</p>
                     </div>
                     <Button asChild variant="link" size="sm" className="h-auto px-0 text-xs">
                       <Link href="/docs/discovery-rules" target="_blank" rel="noreferrer">
@@ -389,10 +442,10 @@ export function DiscoveryRulesPanel({ onDiscoveryFinished }: { onDiscoveryFinish
                       <div className="rounded-lg border border-border/80 bg-background/80 p-2">
                         <Globe2 className="h-4 w-4 text-foreground" />
                       </div>
-                      <div>
+                      <div className="space-y-1">
                         <div className="text-sm font-medium text-foreground">按来源分区</div>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          国外远程更稳定，国内社区更灵活。你可以各挑几条，不用一口气全搬进去。
+                        <p className="text-xs text-muted-foreground">
+                          国外远程通常更标准化，国内社区通常更灵活。你可以各挑几条，不必一口气全上。
                         </p>
                       </div>
                     </div>
@@ -403,7 +456,7 @@ export function DiscoveryRulesPanel({ onDiscoveryFinished }: { onDiscoveryFinish
                     onAddPreset={handleAddPreset}
                     isBusy={isSyncing || isRunning}
                     title="规则市场"
-                    description="内置规则按来源分成国外远程和国内社区两组，想加哪条就点哪条。"
+                    description="所有内置规则都在这里，按国外远程和国内社区两类来挑。"
                   />
                 </div>
               </TabsContent>
