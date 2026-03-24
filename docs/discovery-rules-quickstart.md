@@ -23,6 +23,7 @@
 - 招聘站官方文档里的 RSS/Atom
 - 明确提供 feed 的远程岗位聚合站
 - 有公开订阅地址的分类职位源
+- 支持按分类 / 职位类型筛选后输出 feed 的招聘站
 
 不要把普通职位列表页或者公司 careers 页直接填进 `RSS/Atom URL`，那种大概率不是 feed。
 
@@ -33,6 +34,17 @@
 - `https://remoteyeah.com/remote-back-end-jobs.xml`
 - `https://weworkremotely.com/categories/remote-back-end-programming-jobs.rss`
 - `https://www.smartremotejobs.com/feed/software-development-remote-jobs.rss`
+- `https://remotefirstjobs.com/rss/jobs/software-development.rss`
+- `https://remotefirstjobs.com/rss/jobs/ai.rss`
+- `https://remotefirstjobs.com/rss/jobs/golang.rss`
+- `https://www.realworkfromanywhere.com/rss.xml`
+- `https://www.realworkfromanywhere.com/remote-backend-jobs/rss.xml`
+- `https://www.realworkfromanywhere.com/remote-ai-jobs/rss.xml`
+- `https://remoteok.com/rss`
+- `https://jobicy.com/feed/job_feed?job_categories=dev&job_types=full-time`
+- `https://jobicy.com/feed/job_feed?job_categories=data-science&job_types=full-time`
+- `https://www.smartremotejobs.com/feed/devops-remote-jobs.rss`
+- `https://www.smartremotejobs.com/feed/data-science-remote-jobs.rss`
 - `https://www.v2ex.com/feed/jobs.xml`
 - `https://linux.do/c/job/27.rss`
 - `https://linux.do/tag/2116-tag/2116.rss`
@@ -56,12 +68,23 @@
 4. `We Work Remotely Backend`
 5. `SmartRemoteJobs SWE`
 
+如果你想把国外远程盘子再拉宽一点，可以继续加：
+
+6. `RemoteFirstJobs Software Dev`
+7. `RemoteFirstJobs AI`
+8. `RemoteFirstJobs Golang`
+9. `Real Work From Anywhere Backend`
+10. `Jobicy Dev Full-Time`
+11. `Remote OK Engineering`（更宽，噪音也更大）
+12. `SmartRemoteJobs DevOps`
+13. `SmartRemoteJobs Data Science`
+
 如果你也想收一些国内技术社区招聘线索，可以加：
 
-6. `V2EX 酷工作`
-7. `LINUX DO 招聘分类`
-8. `LINUX DO 招聘标签`
-9. `Ruby China Topics`（噪音更大，放最后）
+14. `V2EX 酷工作`
+15. `LINUX DO 招聘分类`
+16. `LINUX DO 招聘标签`
+17. `Ruby China Topics`（噪音更大，放最后）
 
 ## How To Fill Each Field
 

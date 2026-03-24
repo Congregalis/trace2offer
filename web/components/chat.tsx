@@ -827,8 +827,8 @@ export function Chat() {
   ];
 
   return (
-    <div className="flex flex-col h-[calc(100vh-3.5rem)]">
-      <div className="px-4 pt-4 pb-2">
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="border-b border-border/60 bg-background/38 px-4 pb-3 pt-4 backdrop-blur-sm">
         <div className="max-w-3xl mx-auto flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-[220px]">
             <Select
@@ -884,22 +884,22 @@ export function Chat() {
               )}
             >
               {message.role === "assistant" && (
-                <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center flex-shrink-0">
+                <div className="w-8 h-8 rounded-full border border-border/70 bg-background/80 shadow-sm flex items-center justify-center flex-shrink-0">
                   <Bot className="w-4 h-4 text-foreground" />
                 </div>
               )}
               <div
                 className={cn(
-                  "rounded-lg px-4 py-3 max-w-[80%]",
+                  "max-w-[80%] rounded-[22px] px-4 py-3 shadow-sm",
                   message.role === "user"
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-secondary text-secondary-foreground"
+                    ? "bg-primary text-primary-foreground shadow-[var(--panel-shadow)]"
+                    : "border border-border/70 bg-background/72 text-foreground"
                 )}
               >
                 <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
               </div>
               {message.role === "user" && (
-                <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
+                <div className="w-8 h-8 rounded-full bg-primary shadow-[var(--panel-shadow)] flex items-center justify-center flex-shrink-0">
                   <User className="w-4 h-4 text-primary-foreground" />
                 </div>
               )}
@@ -908,10 +908,10 @@ export function Chat() {
 
           {isLoading && (
             <div className="flex gap-3">
-              <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center flex-shrink-0">
+              <div className="w-8 h-8 rounded-full border border-border/70 bg-background/80 shadow-sm flex items-center justify-center flex-shrink-0">
                 <Bot className="w-4 h-4 text-foreground" />
               </div>
-              <div className="bg-secondary rounded-lg px-4 py-3">
+              <div className="rounded-[22px] border border-border/70 bg-background/72 px-4 py-3 shadow-sm">
                 <div className="flex gap-1">
                   <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
                   <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
@@ -938,7 +938,7 @@ export function Chat() {
                     setInput(action.label);
                     textareaRef.current?.focus();
                   }}
-                  className="text-muted-foreground hover:text-foreground"
+                  className="rounded-full border border-border/70 bg-background/72 text-muted-foreground hover:text-foreground"
                 >
                   <action.icon className="w-3 h-3 mr-1" />
                   {action.label}
@@ -949,7 +949,7 @@ export function Chat() {
         </div>
       )}
 
-      <div className="border-t border-border bg-card/50 backdrop-blur-sm p-4">
+      <div className="border-t border-border/60 bg-background/42 p-4 backdrop-blur-sm">
         <form onSubmit={handleSubmit} className="max-w-3xl mx-auto">
           <div className="relative">
             <Textarea
@@ -958,7 +958,7 @@ export function Chat() {
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="输入消息，让 Agent 帮你管理求职..."
-              className="resize-none pr-12 min-h-[52px] max-h-32 bg-secondary border-border/90 focus-visible:border-primary/70 focus-visible:ring-primary/45"
+              className="min-h-[52px] max-h-32 resize-none border-border/80 bg-background/74 pr-12 focus-visible:border-primary/70 focus-visible:ring-primary/45"
               rows={1}
               disabled={isSessionBootstrapping || isSessionSwitching || isSessionCreating || !hasHydrated}
             />

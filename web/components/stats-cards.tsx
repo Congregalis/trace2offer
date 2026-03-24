@@ -94,13 +94,13 @@ interface APIPayload {
 }
 
 const STATUS_ACCENT_CLASS: Record<string, string> = {
-  new: "text-fuchsia-300",
-  preparing: "text-cyan-300",
-  applied: "text-warning",
-  interviewing: "text-indigo-300",
-  offered: "text-success",
-  declined: "text-chart-4",
-  rejected: "text-destructive",
+  new: "text-fuchsia-700 dark:text-fuchsia-300",
+  preparing: "text-cyan-700 dark:text-cyan-300",
+  applied: "text-amber-600 dark:text-warning",
+  interviewing: "text-indigo-700 dark:text-indigo-300",
+  offered: "text-emerald-600 dark:text-success",
+  declined: "text-slate-600 dark:text-chart-4",
+  rejected: "text-rose-600 dark:text-destructive",
   archived: "text-muted-foreground",
 };
 

@@ -165,7 +165,7 @@ const STATUS_VISUAL_CONFIG: Record<
 > = {
   new: {
     className:
-      "bg-gradient-to-r from-fuchsia-500/40 via-pink-500/15 to-fuchsia-500/40 text-fuchsia-300 shadow-sm shadow-fuchsia-500/30",
+      "bg-gradient-to-r from-fuchsia-500/18 via-pink-500/10 to-fuchsia-500/18 text-fuchsia-700 ring-1 ring-inset ring-fuchsia-500/18 shadow-sm shadow-fuchsia-500/15 dark:from-fuchsia-500/40 dark:via-pink-500/15 dark:to-fuchsia-500/40 dark:text-fuchsia-300 dark:ring-fuchsia-400/10 dark:shadow-fuchsia-500/30",
     icon: Sparkles,
     label: "NEW",
     dotPingClassName: "bg-fuchsia-400/80",
@@ -173,28 +173,28 @@ const STATUS_VISUAL_CONFIG: Record<
   },
   preparing: {
     className:
-      "bg-gradient-to-r from-cyan-500/40 via-sky-500/15 to-cyan-500/40 text-cyan-300 shadow-sm shadow-cyan-500/30",
+      "bg-gradient-to-r from-cyan-500/18 via-sky-500/10 to-cyan-500/18 text-cyan-700 ring-1 ring-inset ring-cyan-500/18 shadow-sm shadow-cyan-500/15 dark:from-cyan-500/40 dark:via-sky-500/15 dark:to-cyan-500/40 dark:text-cyan-300 dark:ring-cyan-400/10 dark:shadow-cyan-500/30",
     icon: Wrench,
     dotPingClassName: "bg-cyan-400/80",
     dotClassName: "bg-cyan-300",
   },
   applied: {
     className:
-      "bg-gradient-to-r from-warning/45 via-chart-5/20 to-warning/45 text-warning shadow-sm shadow-warning/30",
+      "bg-gradient-to-r from-warning/28 via-chart-5/12 to-warning/28 text-amber-700 ring-1 ring-inset ring-warning/20 shadow-sm shadow-warning/15 dark:from-warning/45 dark:via-chart-5/20 dark:to-warning/45 dark:text-warning dark:ring-warning/10 dark:shadow-warning/30",
     icon: Send,
     dotPingClassName: "bg-warning/70",
     dotClassName: "bg-warning",
   },
   interviewing: {
     className:
-      "bg-gradient-to-r from-indigo-500/40 via-blue-500/15 to-indigo-500/40 text-indigo-300 shadow-sm shadow-indigo-500/30",
+      "bg-gradient-to-r from-indigo-500/18 via-blue-500/10 to-indigo-500/18 text-indigo-700 ring-1 ring-inset ring-indigo-500/18 shadow-sm shadow-indigo-500/15 dark:from-indigo-500/40 dark:via-blue-500/15 dark:to-indigo-500/40 dark:text-indigo-300 dark:ring-indigo-400/10 dark:shadow-indigo-500/30",
     icon: MessageCircle,
     dotPingClassName: "bg-indigo-400/80",
     dotClassName: "bg-indigo-300",
   },
   offered: {
     className:
-      "bg-gradient-to-r from-success/55 via-warning/20 to-success/55 text-success shadow-sm shadow-success/45",
+      "bg-gradient-to-r from-success/30 via-warning/14 to-success/30 text-emerald-700 ring-1 ring-inset ring-success/20 shadow-sm shadow-success/20 dark:from-success/55 dark:via-warning/20 dark:to-success/55 dark:text-success dark:ring-success/10 dark:shadow-success/45",
     icon: Trophy,
     label: "OFFER",
     dotPingClassName: "bg-success/80",
@@ -202,14 +202,14 @@ const STATUS_VISUAL_CONFIG: Record<
   },
   declined: {
     className:
-      "bg-gradient-to-r from-chart-4/35 via-chart-4/15 to-chart-4/35 text-chart-4 shadow-sm shadow-chart-4/20",
+      "bg-gradient-to-r from-chart-4/18 via-chart-4/10 to-chart-4/18 text-violet-700 ring-1 ring-inset ring-chart-4/16 shadow-sm shadow-chart-4/14 dark:from-chart-4/35 dark:via-chart-4/15 dark:to-chart-4/35 dark:text-chart-4 dark:ring-chart-4/10 dark:shadow-chart-4/20",
     icon: Ban,
     dotPingClassName: "bg-chart-4/70",
     dotClassName: "bg-chart-4",
   },
   rejected: {
     className:
-      "bg-gradient-to-r from-destructive/35 via-destructive/15 to-destructive/35 text-destructive shadow-sm shadow-destructive/20",
+      "bg-gradient-to-r from-destructive/18 via-destructive/10 to-destructive/18 text-rose-700 ring-1 ring-inset ring-destructive/16 shadow-sm shadow-destructive/14 dark:from-destructive/35 dark:via-destructive/15 dark:to-destructive/35 dark:text-destructive dark:ring-destructive/10 dark:shadow-destructive/20",
     icon: CircleX,
     dotPingClassName: "bg-destructive/70",
     dotClassName: "bg-destructive",

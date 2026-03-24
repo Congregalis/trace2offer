@@ -1,11 +1,21 @@
 "use client";
 
-import { getDiscoveryPresetsByGroup } from "@/lib/discovery-presets";
+import { DISCOVERY_PRESETS } from "@/lib/discovery-presets";
 import { Badge } from "@/components/ui/badge";
 
 export function DiscoveryQuickstartContent() {
-  const priorityPresets = getDiscoveryPresetsByGroup("priority");
-  const generalPresets = getDiscoveryPresetsByGroup("general");
+  const priorityPresets = DISCOVERY_PRESETS.filter((preset) =>
+    ["remoteyeah-ai-engineer", "himalayas-remote-swe", "remoteyeah-backend", "wwr-backend", "v2ex-jobs"].includes(preset.id)
+  );
+  const generalPresets = DISCOVERY_PRESETS.filter((preset) =>
+    [
+      "remotefirstjobs-ai",
+      "remotefirstjobs-software-dev",
+      "realworkfromanywhere-backend",
+      "jobicy-dev-fulltime",
+      "remoteok-engineering",
+    ].includes(preset.id)
+  );
   const starterKeywords = [
     "software engineer",
     "backend",

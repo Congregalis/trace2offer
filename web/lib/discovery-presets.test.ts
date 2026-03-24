@@ -31,6 +31,16 @@ test("international presets are grouped under overseas remote market", () => {
     "remoteyeah-backend",
     "wwr-backend",
     "smartremotejobs-swe",
+    "remotefirstjobs-ai",
+    "remotefirstjobs-software-dev",
+    "remotefirstjobs-golang",
+    "realworkfromanywhere-backend",
+    "realworkfromanywhere-ai",
+    "jobicy-dev-fulltime",
+    "jobicy-data-science-fulltime",
+    "remoteok-engineering",
+    "smartremotejobs-devops",
+    "smartremotejobs-data-science",
   ];
 
   const internationalPresets = DISCOVERY_PRESETS.filter((preset) => internationalPresetIds.includes(preset.id));
@@ -39,6 +49,21 @@ test("international presets are grouped under overseas remote market", () => {
     assert.equal(preset.group, "international", `expected ${preset.id} in international market`);
     assert.ok(preset.tags.includes("国外远程"), `expected ${preset.id} tagged as 国外远程`);
   }
+});
+
+test("expanded market includes newly verified remote job feeds", () => {
+  const ids = new Set(DISCOVERY_PRESETS.map((preset) => preset.id));
+
+  assert.ok(ids.has("remotefirstjobs-ai"), "expected RemoteFirstJobs AI preset");
+  assert.ok(ids.has("remotefirstjobs-software-dev"), "expected RemoteFirstJobs software dev preset");
+  assert.ok(ids.has("remotefirstjobs-golang"), "expected RemoteFirstJobs Golang preset");
+  assert.ok(ids.has("realworkfromanywhere-backend"), "expected Real Work From Anywhere backend preset");
+  assert.ok(ids.has("realworkfromanywhere-ai"), "expected Real Work From Anywhere AI preset");
+  assert.ok(ids.has("jobicy-dev-fulltime"), "expected Jobicy dev full-time preset");
+  assert.ok(ids.has("jobicy-data-science-fulltime"), "expected Jobicy data science full-time preset");
+  assert.ok(ids.has("remoteok-engineering"), "expected Remote OK engineering preset");
+  assert.ok(ids.has("smartremotejobs-devops"), "expected SmartRemoteJobs DevOps preset");
+  assert.ok(ids.has("smartremotejobs-data-science"), "expected SmartRemoteJobs data science preset");
 });
 
 test("legacy preset groups are not used anymore", () => {
