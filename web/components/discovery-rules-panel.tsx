@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import type { DiscoveryPreset, DiscoveryPresetGroup } from "@/lib/discovery-presets";
 import { DiscoveryRule, DiscoveryRuleMutationInput, DiscoveryRunResult } from "@/lib/types";
+import { DiscoveryPresetPickerDialog } from "@/components/discovery-preset-picker-dialog";
 import { useDiscoveryStore } from "@/lib/discovery-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,8 +26,9 @@ import {
 } from "@/components/ui/table";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Badge } from "@/components/ui/badge";
-import { RefreshCcw, Settings2, Plus, Trash2, Pencil, Play } from "lucide-react";
+import { Layers3, Pencil, Play, Plus, Rocket, Settings2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 const EMPTY_RULE: DiscoveryRuleMutationInput = {
   name: "",
@@ -63,7 +67,7 @@ function formatRunSummary(lastRun: DiscoveryRunResult | null): string {
 }
 
 export function DiscoveryRulesPanel({ onDiscoveryFinished }: { onDiscoveryFinished?: (result: DiscoveryRunResult) => Promise<void> | void }) {
-  const { rules, lastRun, isLoading, isSyncing, isRunning, hasLoaded, fetchRules, addRule, updateRule, deleteRule, runDiscoveryNow } =
+  const { rules, lastRun, isSyncing, isRunning, hasLoaded, fetchRules, addRule, updateRule, deleteRule, runDiscoveryNow } =
     useDiscoveryStore();
 
   const [isManageOpen, setIsManageOpen] = useState(false);
@@ -71,6 +75,7 @@ export function DiscoveryRulesPanel({ onDiscoveryFinished }: { onDiscoveryFinish
   const [ruleForm, setRuleForm] = useState<DiscoveryRuleMutationInput>(EMPTY_RULE);
   const [includeKeywordsInput, setIncludeKeywordsInput] = useState("");
   const [excludeKeywordsInput, setExcludeKeywordsInput] = useState("");
+  const [presetPickerGroup, setPresetPickerGroup] = useState<DiscoveryPresetGroup | null>(null);
 
   useEffect(() => {
     if (hasLoaded) {
@@ -81,6 +86,16 @@ export function DiscoveryRulesPanel({ onDiscoveryFinished }: { onDiscoveryFinish
       toast.error(message);
     });
   }, [fetchRules, hasLoaded]);
+
+  useEffect(() => {
+    if (!isManageOpen) {
+      return;
+    }
+    void fetchRules().catch((error) => {
+      const message = error instanceof Error && error.message ? error.message : "加载发现规则失败";
+      toast.error(message);
+    });
+  }, [fetchRules, isManageOpen]);
 
   const enabledCount = useMemo(() => rules.filter((item) => item.enabled).length, [rules]);
 
@@ -158,6 +173,17 @@ export function DiscoveryRulesPanel({ onDiscoveryFinished }: { onDiscoveryFinish
     }
   };
 
+  const handleAddPreset = async (preset: DiscoveryPreset) => {
+    try {
+      await addRule(preset.rule);
+      toast.success(`${preset.name} 已添加`);
+      await fetchRules();
+    } catch (error) {
+      const message = error instanceof Error && error.message ? error.message : "添加示例规则失败";
+      toast.error(message);
+    }
+  };
+
   return (
     <div className="rounded-xl border border-border bg-card/30 p-3 sm:p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -169,10 +195,6 @@ export function DiscoveryRulesPanel({ onDiscoveryFinished }: { onDiscoveryFinish
           <p className="text-xs text-muted-foreground">{formatRunSummary(lastRun)}</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button size="sm" variant="outline" onClick={() => void fetchRules()} disabled={isLoading || isSyncing || isRunning}>
-            <RefreshCcw className="mr-1 h-3.5 w-3.5" />
-            刷新规则
-          </Button>
           <Button size="sm" variant="outline" onClick={() => setIsManageOpen(true)} disabled={isSyncing || isRunning}>
             <Settings2 className="mr-1 h-3.5 w-3.5" />
             管理规则
@@ -185,137 +207,213 @@ export function DiscoveryRulesPanel({ onDiscoveryFinished }: { onDiscoveryFinish
       </div>
 
       <Dialog open={isManageOpen} onOpenChange={setIsManageOpen}>
-        <DialogContent className="max-w-5xl">
-          <DialogHeader>
-            <DialogTitle>发现规则管理</DialogTitle>
-            <DialogDescription>配置职位来源与关键词，控制候选池自动发现行为。</DialogDescription>
-          </DialogHeader>
+        <DialogContent className="max-h-[calc(100vh-2rem)] w-[calc(100vw-2rem)] max-w-none overflow-hidden p-0 sm:max-w-none xl:w-[min(1480px,calc(100vw-3rem))]">
+          <div className="max-h-[calc(100vh-2rem)] overflow-y-auto p-6">
+            <DialogHeader>
+              <DialogTitle>发现规则管理</DialogTitle>
+              <DialogDescription>配置职位来源与关键词，控制候选池自动发现行为。</DialogDescription>
+            </DialogHeader>
 
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[360px_minmax(0,1fr)]">
-            <div className="space-y-3 rounded-lg border border-border p-3">
-              <div className="flex items-center justify-between">
-                <div className="text-sm font-medium">{editingRule ? "编辑规则" : "新建规则"}</div>
-                {editingRule ? (
-                  <Button size="sm" variant="ghost" onClick={resetEditor}>
-                    取消编辑
-                  </Button>
-                ) : null}
+            <div className="mt-4 grid gap-4 2xl:grid-cols-[minmax(0,460px)_minmax(0,1fr)]">
+              <div className="space-y-3 rounded-lg border border-border bg-card/20 p-4">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="text-sm font-medium">{editingRule ? "编辑规则" : "新建规则"}</div>
+                  <div className="flex items-center gap-3">
+                    {editingRule ? (
+                      <Button size="sm" variant="ghost" onClick={resetEditor}>
+                        取消编辑
+                      </Button>
+                    ) : null}
+                    <Button asChild variant="link" size="sm" className="h-auto px-0 text-xs">
+                      <Link href="/docs/discovery-rules" target="_blank" rel="noreferrer">
+                        不会填？看快速上手
+                      </Link>
+                    </Button>
+                  </div>
+                </div>
+
+                <FieldGroup>
+                  <Field>
+                    <FieldLabel>规则名</FieldLabel>
+                    <Input value={ruleForm.name} onChange={(e) => setRuleForm((prev) => ({ ...prev, name: e.target.value }))} />
+                  </Field>
+                  <Field>
+                    <FieldLabel>RSS/Atom URL</FieldLabel>
+                    <Input value={ruleForm.feedUrl} onChange={(e) => setRuleForm((prev) => ({ ...prev, feedUrl: e.target.value }))} />
+                  </Field>
+                  <Field>
+                    <FieldLabel>来源标签</FieldLabel>
+                    <Input value={ruleForm.source} onChange={(e) => setRuleForm((prev) => ({ ...prev, source: e.target.value }))} />
+                  </Field>
+                  <Field>
+                    <FieldLabel>默认地区</FieldLabel>
+                    <Input
+                      value={ruleForm.defaultLocation}
+                      onChange={(e) => setRuleForm((prev) => ({ ...prev, defaultLocation: e.target.value }))}
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel>包含关键词（逗号/换行分隔）</FieldLabel>
+                    <Textarea value={includeKeywordsInput} onChange={(e) => setIncludeKeywordsInput(e.target.value)} rows={3} />
+                  </Field>
+                  <Field>
+                    <FieldLabel>排除关键词（逗号/换行分隔）</FieldLabel>
+                    <Textarea value={excludeKeywordsInput} onChange={(e) => setExcludeKeywordsInput(e.target.value)} rows={3} />
+                  </Field>
+                  <Field>
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={ruleForm.enabled}
+                        onChange={(e) => setRuleForm((prev) => ({ ...prev, enabled: e.target.checked }))}
+                      />
+                      启用规则
+                    </label>
+                  </Field>
+                </FieldGroup>
+
+                <Button onClick={() => void handleSubmitRule()} disabled={isSyncing || isRunning} className="w-full">
+                  <Plus className="mr-2 h-4 w-4" />
+                  {editingRule ? "保存规则" : "创建规则"}
+                </Button>
               </div>
 
-              <FieldGroup>
-                <Field>
-                  <FieldLabel>规则名</FieldLabel>
-                  <Input value={ruleForm.name} onChange={(e) => setRuleForm((prev) => ({ ...prev, name: e.target.value }))} />
-                </Field>
-                <Field>
-                  <FieldLabel>RSS/Atom URL</FieldLabel>
-                  <Input value={ruleForm.feedUrl} onChange={(e) => setRuleForm((prev) => ({ ...prev, feedUrl: e.target.value }))} />
-                </Field>
-                <Field>
-                  <FieldLabel>来源标签</FieldLabel>
-                  <Input value={ruleForm.source} onChange={(e) => setRuleForm((prev) => ({ ...prev, source: e.target.value }))} />
-                </Field>
-                <Field>
-                  <FieldLabel>默认地区</FieldLabel>
-                  <Input
-                    value={ruleForm.defaultLocation}
-                    onChange={(e) => setRuleForm((prev) => ({ ...prev, defaultLocation: e.target.value }))}
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel>包含关键词（逗号/换行分隔）</FieldLabel>
-                  <Textarea value={includeKeywordsInput} onChange={(e) => setIncludeKeywordsInput(e.target.value)} rows={3} />
-                </Field>
-                <Field>
-                  <FieldLabel>排除关键词（逗号/换行分隔）</FieldLabel>
-                  <Textarea value={excludeKeywordsInput} onChange={(e) => setExcludeKeywordsInput(e.target.value)} rows={3} />
-                </Field>
-                <Field>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={ruleForm.enabled}
-                      onChange={(e) => setRuleForm((prev) => ({ ...prev, enabled: e.target.checked }))}
-                    />
-                    启用规则
-                  </label>
-                </Field>
-              </FieldGroup>
+              <div className="space-y-4">
+                {rules.length === 0 ? (
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <button
+                      type="button"
+                      className="rounded-xl border border-border bg-card/30 p-4 text-left transition-colors hover:bg-card/50"
+                      onClick={() => setPresetPickerGroup("priority")}
+                      disabled={isSyncing || isRunning}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="rounded-lg border border-border/80 bg-background/80 p-2">
+                          <Rocket className="h-4 w-4 text-foreground" />
+                        </div>
+                        <div className="space-y-1">
+                          <div className="text-sm font-medium text-foreground">快速开始</div>
+                          <p className="text-xs text-muted-foreground">
+                            第一次没有规则时，先看最贴近 Software Engineer / Agent / AI Infra 的示例规则。
+                          </p>
+                        </div>
+                      </div>
+                    </button>
 
-              <Button onClick={() => void handleSubmitRule()} disabled={isSyncing || isRunning} className="w-full">
-                <Plus className="mr-2 h-4 w-4" />
-                {editingRule ? "保存规则" : "创建规则"}
-              </Button>
-            </div>
+                    <button
+                      type="button"
+                      className="rounded-xl border border-border bg-card/30 p-4 text-left transition-colors hover:bg-card/50"
+                      onClick={() => setPresetPickerGroup("general")}
+                      disabled={isSyncing || isRunning}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="rounded-lg border border-border/80 bg-background/80 p-2">
+                          <Layers3 className="h-4 w-4 text-foreground" />
+                        </div>
+                        <div className="space-y-1">
+                          <div className="text-sm font-medium text-foreground">通用补充</div>
+                          <p className="text-xs text-muted-foreground">
+                            等基础规则跑顺了，再补更宽的软件工程远程岗位来源，别一上来全摊开。
+                          </p>
+                        </div>
+                      </div>
+                    </button>
+                  </div>
+                ) : null}
 
-            <div className="overflow-hidden rounded-lg border border-border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>规则</TableHead>
-                    <TableHead>来源</TableHead>
-                    <TableHead>关键词</TableHead>
-                    <TableHead>状态</TableHead>
-                    <TableHead className="text-right">操作</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {rules.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
-                        暂无规则
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    rules.map((rule) => (
-                      <TableRow key={rule.id}>
-                        <TableCell className="align-top">
-                          <div className="font-medium">{rule.name}</div>
-                          <div className="line-clamp-1 text-xs text-muted-foreground">{rule.feedUrl}</div>
-                        </TableCell>
-                        <TableCell className="align-top text-sm text-muted-foreground">{rule.source || "-"}</TableCell>
-                        <TableCell className="align-top">
-                          <div className="text-xs text-muted-foreground">
-                            + {rule.includeKeywords.join(", ") || "-"}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            - {rule.excludeKeywords.join(", ") || "-"}
-                          </div>
-                        </TableCell>
-                        <TableCell className="align-top">
-                          <Badge variant={rule.enabled ? "default" : "secondary"}>
-                            {rule.enabled ? "启用" : "停用"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="align-top text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <Button size="sm" variant="outline" onClick={() => beginEdit(rule)} disabled={isSyncing || isRunning}>
-                              <Pencil className="mr-1 h-3.5 w-3.5" />
-                              编辑
-                            </Button>
-                            <Button size="sm" variant="outline" onClick={() => void handleToggleRule(rule)} disabled={isSyncing || isRunning}>
-                              {rule.enabled ? "停用" : "启用"}
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              onClick={() => void handleDeleteRule(rule.id)}
-                              disabled={isSyncing || isRunning}
-                            >
-                              <Trash2 className="mr-1 h-3.5 w-3.5" />
-                              删除
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
+                <div className="rounded-lg border border-border bg-card/20">
+                  <div className="border-b border-border px-4 py-3">
+                    <div className="text-sm font-medium text-foreground">已有规则</div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {rules.length === 0 ? "还没有规则，先从上面的示例开始。" : "这里是当前已经生效的发现规则。"}
+                    </p>
+                  </div>
+                  <div className={cn("overflow-auto", rules.length > 0 ? "max-h-[620px]" : "max-h-none")}>
+                    <Table>
+                      <TableHeader className="sticky top-0 z-10 bg-background">
+                        <TableRow>
+                          <TableHead>规则</TableHead>
+                          <TableHead>来源</TableHead>
+                          <TableHead>关键词</TableHead>
+                          <TableHead>状态</TableHead>
+                          <TableHead className="text-right">操作</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {rules.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
+                              暂无规则，先从上面的推荐示例开始。
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          rules.map((rule) => (
+                            <TableRow key={rule.id}>
+                              <TableCell className="align-top">
+                                <div className="font-medium">{rule.name}</div>
+                                <div className="line-clamp-1 text-xs text-muted-foreground">{rule.feedUrl}</div>
+                              </TableCell>
+                              <TableCell className="align-top text-sm text-muted-foreground">{rule.source || "-"}</TableCell>
+                              <TableCell className="align-top">
+                                <div className="text-xs text-muted-foreground">
+                                  + {rule.includeKeywords.join(", ") || "-"}
+                                </div>
+                                <div className="text-xs text-muted-foreground">
+                                  - {rule.excludeKeywords.join(", ") || "-"}
+                                </div>
+                              </TableCell>
+                              <TableCell className="align-top">
+                                <Badge variant={rule.enabled ? "default" : "secondary"}>
+                                  {rule.enabled ? "启用" : "停用"}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="align-top text-right">
+                                <div className="flex items-center justify-end gap-2">
+                                  <Button size="sm" variant="outline" onClick={() => beginEdit(rule)} disabled={isSyncing || isRunning}>
+                                    <Pencil className="mr-1 h-3.5 w-3.5" />
+                                    编辑
+                                  </Button>
+                                  <Button size="sm" variant="outline" onClick={() => void handleToggleRule(rule)} disabled={isSyncing || isRunning}>
+                                    {rule.enabled ? "停用" : "启用"}
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="destructive"
+                                    onClick={() => void handleDeleteRule(rule.id)}
+                                    disabled={isSyncing || isRunning}
+                                  >
+                                    <Trash2 className="mr-1 h-3.5 w-3.5" />
+                                    删除
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </DialogContent>
       </Dialog>
+
+      {presetPickerGroup ? (
+        <DiscoveryPresetPickerDialog
+          open={presetPickerGroup !== null}
+          onOpenChange={(open) => {
+            if (!open) {
+              setPresetPickerGroup(null);
+            }
+          }}
+          group={presetPickerGroup}
+          rules={rules}
+          onAddPreset={handleAddPreset}
+          isBusy={isSyncing || isRunning}
+        />
+      ) : null}
     </div>
   );
 }

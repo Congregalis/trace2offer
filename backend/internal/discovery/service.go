@@ -310,7 +310,7 @@ func buildCandidateMutation(rule model.DiscoveryRule, entry feedEntry) model.Can
 		Source:              source,
 		Location:            strings.TrimSpace(rule.DefaultLocation),
 		JDURL:               link,
-		CompanyWebsiteURL:   guessCompanyWebsite(link),
+		CompanyWebsiteURL:   "",
 		Status:              candidate.StatusPendingReview,
 		MatchScore:          matchScore,
 		MatchReasons:        includeHits,
@@ -371,14 +371,6 @@ func deriveCompanyAndPosition(rule model.DiscoveryRule, title string) (string, s
 		company = "Discovered Company"
 	}
 	return company, trimmed
-}
-
-func guessCompanyWebsite(rawURL string) string {
-	parsed, err := url.Parse(strings.TrimSpace(rawURL))
-	if err != nil || parsed.Host == "" {
-		return ""
-	}
-	return parsed.Scheme + "://" + parsed.Host
 }
 
 type ValidationError struct {

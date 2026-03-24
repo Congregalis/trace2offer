@@ -7,6 +7,7 @@ import { DiscoveryRulesPanel } from "@/components/discovery-rules-panel";
 import { Candidate, CandidateMutationInput, CandidateStatus } from "@/lib/types";
 import { CANDIDATE_STATUS_CONFIG } from "@/lib/types";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -38,7 +39,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
-import { MoreHorizontal, Plus, Search, Sparkles, Trash2, ArrowRightCircle, Pencil } from "lucide-react";
+import { ArrowRightCircle, ExternalLink, MoreHorizontal, Pencil, Plus, Search, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -261,9 +262,9 @@ export function CandidatesTable() {
           <TableHeader>
             <TableRow>
               <TableHead>公司 / 职位</TableHead>
+              <TableHead>详情</TableHead>
               <TableHead>状态</TableHead>
               <TableHead>匹配度</TableHead>
-              <TableHead>来源</TableHead>
               <TableHead>更新时间</TableHead>
               <TableHead className="text-right">操作</TableHead>
             </TableRow>
@@ -281,7 +282,51 @@ export function CandidatesTable() {
                   <TableCell className="align-top">
                     <div className="font-medium">{candidate.company}</div>
                     <div className="text-sm text-muted-foreground">{candidate.position}</div>
-                    {candidate.location ? <div className="text-xs text-muted-foreground/80">{candidate.location}</div> : null}
+                    <div className="mt-2 space-y-1 text-xs text-muted-foreground/80">
+                      {candidate.location ? <div>{candidate.location}</div> : null}
+                      {candidate.source ? <div>来源：{candidate.source}</div> : null}
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {candidate.companyWebsiteUrl ? (
+                        <a
+                          href={candidate.companyWebsiteUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 text-xs text-muted-foreground underline-offset-4 hover:underline"
+                        >
+                          公司官网
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      ) : null}
+                    </div>
+                  </TableCell>
+                  <TableCell className="align-top">
+                    <div className="max-w-sm space-y-3">
+                      <div className="flex flex-wrap gap-3 text-sm">
+                        {candidate.jdUrl ? (
+                          <a
+                            href={candidate.jdUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 text-primary underline-offset-4 hover:underline"
+                          >
+                            职位详情
+                            <ExternalLink className="h-3.5 w-3.5" />
+                          </a>
+                        ) : (
+                          <span className="text-muted-foreground">暂无职位详情链接</span>
+                        )}
+                      </div>
+                      {candidate.matchReasons.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {candidate.matchReasons.slice(0, 4).map((reason) => (
+                            <Badge key={reason} variant="secondary" className="text-[11px]">
+                              {reason}
+                            </Badge>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
                   </TableCell>
                   <TableCell className="align-top">
                     <div className="space-y-2">
@@ -309,7 +354,6 @@ export function CandidatesTable() {
                       {candidate.matchScore}
                     </span>
                   </TableCell>
-                  <TableCell className="align-top text-sm text-muted-foreground">{candidate.source || "-"}</TableCell>
                   <TableCell className="align-top text-sm text-muted-foreground">{formatDateTime(candidate.updatedAt)}</TableCell>
                   <TableCell className="align-top text-right">
                     <div className="flex items-center justify-end gap-2">
