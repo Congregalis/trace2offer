@@ -33,6 +33,10 @@
 - `https://remoteyeah.com/remote-back-end-jobs.xml`
 - `https://weworkremotely.com/categories/remote-back-end-programming-jobs.rss`
 - `https://www.smartremotejobs.com/feed/software-development-remote-jobs.rss`
+- `https://www.v2ex.com/feed/jobs.xml`
+- `https://linux.do/c/job/27.rss`
+- `https://linux.do/tag/2116-tag/2116.rss`
+- `https://ruby-china.org/topics/feed`
 
 ## Recommended Starter Feeds
 
@@ -51,6 +55,13 @@
 
 4. `We Work Remotely Backend`
 5. `SmartRemoteJobs SWE`
+
+如果你也想收一些国内技术社区招聘线索，可以加：
+
+6. `V2EX 酷工作`
+7. `LINUX DO 招聘分类`
+8. `LINUX DO 招聘标签`
+9. `Ruby China Topics`（噪音更大，放最后）
 
 ## How To Fill Each Field
 
@@ -151,6 +162,16 @@
 
 `intern, frontend, ios, android, sales, marketing, recruiter, wordpress`
 
+如果你想让国内社区源也能勉强收得住，可以再补一组中文词：
+
+### 国内源建议包含关键词
+
+`招聘, agent, ai, llm, 后端, backend, 全栈, software engineer, golang, python`
+
+### 国内源建议排除关键词
+
+`实习, 销售, 客服, 运营, 测试, 线下活动, 闲聊`
+
 ## Common Mistakes
 
 ### 1. 把普通网页当 feed
@@ -172,6 +193,16 @@
 ### 5. 重复添加同一来源
 
 如果两个规则本质上盯的是同一个 feed，只是名字不同，候选池会产生大量重复感知。优先复用已有规则，再调整关键词。
+
+### 6. 把社区 feed 当成标准 JD 源
+
+像 `V2EX / LINUX DO / Ruby China` 这种源，本质上更像招聘帖子流，不是统一格式的职位平台。
+
+这意味着：
+
+- 质量波动会更大
+- 岗位描述可能是自由文本
+- 关键词过滤比国外聚合站更重要
 
 ## Suggested First Run
 
