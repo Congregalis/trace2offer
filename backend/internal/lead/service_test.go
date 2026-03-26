@@ -24,6 +24,7 @@ func TestNormalizeMutationInput(t *testing.T) {
 		Notes:             " note ",
 		CompanyWebsiteURL: " https://openai.com ",
 		JDURL:             " https://openai.com/careers/backend-engineer ",
+		JDText:            "  JD 原文  ",
 		Location:          "  San Francisco  ",
 	}
 
@@ -52,6 +53,9 @@ func TestNormalizeMutationInput(t *testing.T) {
 	}
 	if normalized.JDURL != "https://openai.com/careers/backend-engineer" {
 		t.Fatalf("expected trimmed jd url, got %q", normalized.JDURL)
+	}
+	if normalized.JDText != "JD 原文" {
+		t.Fatalf("expected trimmed jd text, got %q", normalized.JDText)
 	}
 	if normalized.Location != "San Francisco" {
 		t.Fatalf("expected trimmed location, got %q", normalized.Location)

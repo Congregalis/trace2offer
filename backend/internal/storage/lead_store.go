@@ -86,6 +86,7 @@ func (s *FileLeadStore) Create(input model.LeadMutationInput) (model.Lead, error
 		Notes:             input.Notes,
 		CompanyWebsiteURL: input.CompanyWebsiteURL,
 		JDURL:             input.JDURL,
+		JDText:            input.JDText,
 		Location:          input.Location,
 		CreatedAt:         now,
 		UpdatedAt:         now,
@@ -121,6 +122,7 @@ func (s *FileLeadStore) Update(id string, input model.LeadMutationInput) (model.
 		updated.Notes = input.Notes
 		updated.CompanyWebsiteURL = input.CompanyWebsiteURL
 		updated.JDURL = input.JDURL
+		updated.JDText = input.JDText
 		updated.Location = input.Location
 		if updated.CreatedAt == "" {
 			updated.CreatedAt = time.Now().UTC().Format(time.RFC3339)

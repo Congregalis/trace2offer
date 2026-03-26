@@ -97,6 +97,7 @@ func TestLeadAndChatAPI(t *testing.T) {
 		Notes:             "test lead",
 		CompanyWebsiteURL: "https://openai.com",
 		JDURL:             "https://openai.com/careers/backend",
+		JDText:            "create jd text",
 		Location:          "San Francisco, CA",
 	}
 
@@ -118,6 +119,9 @@ func TestLeadAndChatAPI(t *testing.T) {
 	if createPayload.Data.JDURL != "https://openai.com/careers/backend" {
 		t.Fatalf("expected jd url persisted, got %q", createPayload.Data.JDURL)
 	}
+	if createPayload.Data.JDText != "create jd text" {
+		t.Fatalf("expected jd text persisted, got %q", createPayload.Data.JDText)
+	}
 	if createPayload.Data.Location != "San Francisco, CA" {
 		t.Fatalf("expected location persisted, got %q", createPayload.Data.Location)
 	}
@@ -134,6 +138,7 @@ func TestLeadAndChatAPI(t *testing.T) {
 		Notes:             "round 1 scheduled",
 		CompanyWebsiteURL: "https://openai.com",
 		JDURL:             "https://openai.com/careers/backend",
+		JDText:            "put jd text",
 		Location:          "San Francisco, CA",
 	}
 
@@ -152,6 +157,9 @@ func TestLeadAndChatAPI(t *testing.T) {
 	if updatePayload.Data.JDURL != "https://openai.com/careers/backend" {
 		t.Fatalf("expected jd url retained on put, got %q", updatePayload.Data.JDURL)
 	}
+	if updatePayload.Data.JDText != "put jd text" {
+		t.Fatalf("expected jd text updated via put, got %q", updatePayload.Data.JDText)
+	}
 
 	patchInput := model.LeadMutationInput{
 		Company:           "OpenAI",
@@ -163,6 +171,7 @@ func TestLeadAndChatAPI(t *testing.T) {
 		Notes:             "updated via patch",
 		CompanyWebsiteURL: "https://openai.com",
 		JDURL:             "https://openai.com/careers/backend-v2",
+		JDText:            "patch jd text",
 		Location:          "Remote (US)",
 	}
 
@@ -176,6 +185,9 @@ func TestLeadAndChatAPI(t *testing.T) {
 	}
 	if updatePayload.Data.JDURL != "https://openai.com/careers/backend-v2" {
 		t.Fatalf("expected jd url updated via patch, got %q", updatePayload.Data.JDURL)
+	}
+	if updatePayload.Data.JDText != "patch jd text" {
+		t.Fatalf("expected jd text updated via patch, got %q", updatePayload.Data.JDText)
 	}
 	if updatePayload.Data.Location != "Remote (US)" {
 		t.Fatalf("expected location updated via patch, got %q", updatePayload.Data.Location)

@@ -41,6 +41,7 @@ func NewLeadCRUDTools(manager lead.Manager, options ...LeadToolsOption) []Tool {
 		&leadUpdateTool{manager: manager},
 		&leadDeleteTool{manager: manager},
 		newLeadCreateFromJDURLTool(manager, config.jdExtractor),
+		newLeadCreateFromJDTextTool(manager, config.jdExtractor),
 	}
 }
 
@@ -233,6 +234,7 @@ func mutationInputSchema(required []string) map[string]any {
 			"notes":               map[string]any{"type": "string"},
 			"company_website_url": map[string]any{"type": "string"},
 			"jd_url":              map[string]any{"type": "string"},
+			"jd_text":             map[string]any{"type": "string"},
 			"location":            map[string]any{"type": "string"},
 		},
 		"required": required,

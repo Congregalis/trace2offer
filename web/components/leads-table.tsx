@@ -68,6 +68,7 @@ const EMPTY_NEW_LEAD: LeadMutationInput = {
   notes: "",
   companyWebsiteUrl: "",
   jdUrl: "",
+  jdText: "",
   location: "",
 };
 
@@ -91,6 +92,7 @@ function toMutationInput(lead: Lead): LeadMutationInput {
     notes: lead.notes,
     companyWebsiteUrl: lead.companyWebsiteUrl,
     jdUrl: lead.jdUrl,
+    jdText: lead.jdText,
     location: lead.location,
   };
 }
@@ -251,6 +253,8 @@ export function LeadsTable() {
   const { leads, isLoading, isSyncing, hasLoaded, fetchLeads, updateLead, deleteLead, addLead } = useLeadsStore();
   const [search, setSearch] = useState("");
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
+  const [jdContentLead, setJDContentLead] = useState<Lead | null>(null);
+  const [jdContentDraft, setJDContentDraft] = useState("");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [newLead, setNewLead] = useState<LeadMutationInput>(EMPTY_NEW_LEAD);
 
@@ -358,6 +362,30 @@ export function LeadsTable() {
     }
   };
 
+  const openJDContentDialog = (lead: Lead) => {
+    setJDContentLead(lead);
+    setJDContentDraft(lead.jdText || "");
+  };
+
+  const handleSaveJDContent = async () => {
+    if (!jdContentLead || isSyncing) {
+      return;
+    }
+
+    try {
+      await updateLead(jdContentLead.id, {
+        ...toMutationInput(jdContentLead),
+        jdText: jdContentDraft,
+      });
+      toast.success("JD 内容已保存");
+      setJDContentLead(null);
+      setJDContentDraft("");
+    } catch (error) {
+      const message = error instanceof Error && error.message ? error.message : "保存 JD 内容失败";
+      toast.error(message);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-4">
@@ -451,7 +479,15 @@ export function LeadsTable() {
                         <ExternalLink className="w-3 h-3" />
                       </a>
                     ) : null}
-                    {!lead.companyWebsiteUrl && !lead.jdUrl ? "-" : null}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 px-2 text-xs"
+                      onClick={() => openJDContentDialog(lead)}
+                      disabled={isSyncing}
+                    >
+                      JD内容
+                    </Button>
                   </div>
                 </TableCell>
                 <TableCell className="text-muted-foreground">{formatDate(lead.updatedAt)}</TableCell>
@@ -489,6 +525,53 @@ export function LeadsTable() {
           </TableBody>
         </Table>
       </div>
+
+      <Dialog
+        open={!!jdContentLead}
+        onOpenChange={(open) => {
+          if (!open) {
+            setJDContentLead(null);
+            setJDContentDraft("");
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>JD 内容</DialogTitle>
+            <DialogDescription>
+              {jdContentLead ? `${jdContentLead.company} / ${jdContentLead.position}` : "查看或维护该线索的 JD 原文"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            {!jdContentDraft.trim() ? (
+              <p className="text-sm text-muted-foreground">
+                当前还没有 JD 内容。你可以直接把 JD 原文粘贴到下面，点保存即可。
+              </p>
+            ) : null}
+            <Textarea
+              value={jdContentDraft}
+              onChange={(e) => setJDContentDraft(e.target.value)}
+              rows={18}
+              placeholder="在这里粘贴 JD 原文..."
+            />
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setJDContentLead(null);
+                  setJDContentDraft("");
+                }}
+                disabled={isSyncing}
+              >
+                取消
+              </Button>
+              <Button onClick={handleSaveJDContent} disabled={isSyncing}>
+                保存 JD 内容
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={!!editingLead}
@@ -643,6 +726,7 @@ export function LeadsTable() {
                   value={editingLead.notes}
                   onChange={(e) => setEditingLead({ ...editingLead, notes: e.target.value })}
                   rows={3}
+                  placeholder="添加备注..."
                 />
               </Field>
               <div className="flex justify-end gap-2 pt-4">

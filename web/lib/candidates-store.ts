@@ -52,6 +52,7 @@ interface APILead {
   notes?: string;
   company_website_url?: string;
   jd_url?: string;
+  jd_text?: string;
   location?: string;
   created_at?: string;
   updated_at?: string;
@@ -254,6 +255,7 @@ function normalizeLead(raw: APILead): Lead {
     notes: (raw.notes || "").trim(),
     companyWebsiteUrl: (raw.company_website_url || "").trim(),
     jdUrl: (raw.jd_url || "").trim(),
+    jdText: (raw.jd_text || "").trim(),
     location: (raw.location || "").trim(),
     createdAt: (raw.created_at || "").trim(),
     updatedAt: (raw.updated_at || "").trim(),

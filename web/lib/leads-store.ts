@@ -19,6 +19,7 @@ interface APILead {
   notes?: string;
   company_website_url?: string;
   jd_url?: string;
+  jd_text?: string;
   location?: string;
   created_at?: string;
   updated_at?: string;
@@ -148,6 +149,7 @@ function normalizeLead(apiLead: APILead): Lead {
     notes: (apiLead.notes || "").trim(),
     companyWebsiteUrl: (apiLead.company_website_url || "").trim(),
     jdUrl: (apiLead.jd_url || "").trim(),
+    jdText: (apiLead.jd_text || "").trim(),
     location: (apiLead.location || "").trim(),
     createdAt: (apiLead.created_at || "").trim(),
     updatedAt: (apiLead.updated_at || "").trim(),
@@ -168,6 +170,7 @@ function toMutationPayload(input: LeadMutationInput): Record<string, unknown> {
     notes: input.notes.trim(),
     company_website_url: input.companyWebsiteUrl.trim(),
     jd_url: input.jdUrl.trim(),
+    jd_text: input.jdText.trim(),
     location: input.location.trim(),
   };
 }
@@ -186,6 +189,7 @@ function toMutationInput(lead: Lead): LeadMutationInput {
     notes: lead.notes,
     companyWebsiteUrl: lead.companyWebsiteUrl,
     jdUrl: lead.jdUrl,
+    jdText: lead.jdText,
     location: lead.location,
   };
 }

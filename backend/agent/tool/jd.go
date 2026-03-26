@@ -47,12 +47,31 @@ type leadCreateFromJDURLTool struct {
 	extractor    JDExtractor
 }
 
+type leadCreateFromJDTextTool struct {
+	manager   lead.Manager
+	extractor JDExtractor
+}
+
 type leadCreateFromJDURLInput struct {
 	JDURL      string `json:"jd_url"`
 	Source     string `json:"source"`
 	Status     string `json:"status"`
 	Priority   *int   `json:"priority"`
 	NextAction string `json:"next_action"`
+}
+
+type leadCreateFromJDTextInput struct {
+	JDText            string `json:"jd_text"`
+	JDURL             string `json:"jd_url"`
+	Company           string `json:"company"`
+	Position          string `json:"position"`
+	Location          string `json:"location"`
+	Source            string `json:"source"`
+	Status            string `json:"status"`
+	Priority          *int   `json:"priority"`
+	NextAction        string `json:"next_action"`
+	CompanyWebsiteURL string `json:"company_website_url"`
+	Notes             string `json:"notes"`
 }
 
 type jdExtraction struct {
@@ -92,6 +111,13 @@ func newLeadCreateFromJDURLTool(manager lead.Manager, extractor JDExtractor) Too
 		},
 		rJinaBaseURL: defaultRJinaBaseURL,
 		extractor:    extractor,
+	}
+}
+
+func newLeadCreateFromJDTextTool(manager lead.Manager, extractor JDExtractor) Tool {
+	return &leadCreateFromJDTextTool{
+		manager:   manager,
+		extractor: extractor,
 	}
 }
 
@@ -221,8 +247,8 @@ func (t *leadCreateFromJDURLTool) Run(ctx context.Context, input json.RawMessage
 		return "", err
 	}
 
-	extracted, warnings := t.extract(ctx, canonicalURL)
-	mutation := buildMutationInput(args, canonicalURL, extracted)
+	extracted, jdText, warnings := t.extract(ctx, canonicalURL)
+	mutation := buildMutationInput(args, canonicalURL, extracted, jdText)
 	created, action, err := t.upsert(canonicalURL, mutation, args)
 	if err != nil {
 		return "", err
@@ -275,9 +301,126 @@ func (t *leadCreateFromJDURLTool) upsert(canonicalURL string, mutation model.Lea
 	return created, "created", nil
 }
 
-func (t *leadCreateFromJDURLTool) extract(ctx context.Context, canonicalURL string) (jdExtraction, []string) {
+func (t *leadCreateFromJDTextTool) Definition() Definition {
+	return Definition{
+		Name:        "lead_create_from_jd_text",
+		Description: "根据粘贴的 jd_text 解析岗位信息并创建 lead（jd_url 可选，提供时按 jd_url 去重）",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"jd_text":             map[string]any{"type": "string", "description": "职位 JD 文本，支持直接粘贴"},
+				"jd_url":              map[string]any{"type": "string", "description": "职位链接，可选"},
+				"company":             map[string]any{"type": "string", "description": "公司名，可选，优先覆盖解析结果"},
+				"position":            map[string]any{"type": "string", "description": "岗位名，可选，优先覆盖解析结果"},
+				"location":            map[string]any{"type": "string", "description": "地点，可选，优先覆盖解析结果"},
+				"source":              map[string]any{"type": "string", "description": "线索来源，可选"},
+				"status":              map[string]any{"type": "string", "description": "lead 状态，可选"},
+				"priority":            map[string]any{"type": "integer", "description": "优先级，可选"},
+				"next_action":         map[string]any{"type": "string", "description": "下一步动作，可选"},
+				"company_website_url": map[string]any{"type": "string", "description": "公司官网，可选"},
+				"notes":               map[string]any{"type": "string", "description": "补充备注，可选"},
+			},
+			"required": []string{"jd_text"},
+		},
+	}
+}
+
+func (t *leadCreateFromJDTextTool) Run(ctx context.Context, input json.RawMessage) (string, error) {
+	if err := ensureManager(t.manager); err != nil {
+		return "", err
+	}
+
+	var args leadCreateFromJDTextInput
+	if err := decodeInput(input, &args); err != nil {
+		return "", err
+	}
+
+	jdText := strings.TrimSpace(args.JDText)
+	if jdText == "" {
+		return "", fmt.Errorf("jd_text is required")
+	}
+
+	warnings := make([]string, 0, 3)
+	rawJDURL := strings.TrimSpace(args.JDURL)
+	canonicalURL := canonicalizeJDURL(rawJDURL)
+	if rawJDURL != "" && canonicalURL == "" {
+		warnings = append(warnings, "jd_url is invalid, ignored for dedupe")
+	}
+
+	extracted := jdExtraction{
+		Description: truncateText(jdText, 1600),
+		Parser:      "manual_text",
+		Confidence:  0.25,
+	}
+	if t.extractor != nil {
+		sourceURL := canonicalURL
+		if sourceURL == "" {
+			sourceURL = "manual://jd_text"
+		}
+		llmExtracted, err := t.extractor.Extract(ctx, sourceURL, jdText)
+		if err != nil {
+			warnings = append(warnings, "llm extract failed: "+err.Error())
+		} else if scoreExtraction(llmExtracted) >= scoreExtraction(extracted) {
+			extracted = llmExtracted
+		}
+	}
+
+	mutation := buildMutationInputFromJDText(args, canonicalURL, jdText, extracted)
+	created, action, err := t.upsert(canonicalURL, mutation, args)
+	if err != nil {
+		return "", err
+	}
+
+	payload := map[string]any{
+		"action": action,
+		"lead":   created,
+		"parsed": map[string]any{
+			"company":    extracted.Company,
+			"position":   extracted.Position,
+			"location":   extracted.Location,
+			"parser":     extracted.Parser,
+			"confidence": extracted.Confidence,
+		},
+	}
+	if len(warnings) > 0 {
+		payload["warnings"] = warnings
+	}
+
+	return marshalOutput(payload)
+}
+
+func (t *leadCreateFromJDTextTool) upsert(canonicalURL string, mutation model.LeadMutationInput, args leadCreateFromJDTextInput) (model.Lead, string, error) {
+	targetCanonical := canonicalizeJDURL(canonicalURL)
+	if targetCanonical != "" {
+		for _, item := range t.manager.List() {
+			existingCanonical := canonicalizeJDURL(item.JDURL)
+			if existingCanonical == "" || existingCanonical != targetCanonical {
+				continue
+			}
+
+			next := mergeForJDTextUpdate(item, mutation, args)
+			updated, found, err := t.manager.Update(item.ID, next)
+			if err != nil {
+				return model.Lead{}, "", err
+			}
+			if !found {
+				break
+			}
+			return updated, "updated", nil
+		}
+	}
+
+	created, err := t.manager.Create(mutation)
+	if err != nil {
+		return model.Lead{}, "", err
+	}
+	return created, "created", nil
+}
+
+func (t *leadCreateFromJDURLTool) extract(ctx context.Context, canonicalURL string) (jdExtraction, string, []string) {
 	warnings := make([]string, 0, 4)
 	extracted := jdExtraction{}
+	jdText := ""
 
 	jinaMarkdown, jinaErr := t.fetchViaRJina(ctx, canonicalURL)
 	if jinaErr != nil {
@@ -290,6 +433,8 @@ func (t *leadCreateFromJDURLTool) extract(ctx context.Context, canonicalURL stri
 	} else {
 		extracted = extractFromHTML(canonicalURL, htmlBody)
 	}
+
+	jdText = selectStoredJDText(jinaMarkdown, htmlBody)
 
 	llmInput := prepareJDTextForLLM(jinaMarkdown, htmlBody, canonicalURL)
 	if t.extractor != nil && llmInput != "" {
@@ -319,7 +464,7 @@ func (t *leadCreateFromJDURLTool) extract(ctx context.Context, canonicalURL stri
 	}
 	extracted.Confidence = clampConfidence(extracted.Confidence)
 
-	return extracted, warnings
+	return extracted, jdText, warnings
 }
 
 func (t *leadCreateFromJDURLTool) fetchViaRJina(ctx context.Context, canonicalURL string) (string, error) {
@@ -452,6 +597,16 @@ func cleanHTMLForLLM(body string) string {
 	plain := cleanParagraph(withoutStyle)
 	plain = urlPattern.ReplaceAllString(plain, "")
 	return truncateText(plain, 8000)
+}
+
+func selectStoredJDText(markdown string, htmlBody string) string {
+	if text := strings.TrimSpace(cleanMarkdownForLLM(markdown)); text != "" {
+		return truncateText(text, 20000)
+	}
+	if text := strings.TrimSpace(cleanHTMLForLLM(htmlBody)); text != "" {
+		return truncateText(text, 20000)
+	}
+	return ""
 }
 
 func parseHostSpecificMarkdown(sourceURL string, markdown string) jdExtraction {
@@ -862,7 +1017,7 @@ func looksLikeImageLine(line string) bool {
 	return strings.HasPrefix(line, "![") || strings.Contains(line, "![Image")
 }
 
-func buildMutationInput(args leadCreateFromJDURLInput, canonicalURL string, extracted jdExtraction) model.LeadMutationInput {
+func buildMutationInput(args leadCreateFromJDURLInput, canonicalURL string, extracted jdExtraction, jdText string) model.LeadMutationInput {
 	source := strings.TrimSpace(args.Source)
 	if source == "" {
 		source = "JD URL"
@@ -899,7 +1054,57 @@ func buildMutationInput(args leadCreateFromJDURLInput, canonicalURL string, extr
 		Notes:             notes,
 		CompanyWebsiteURL: companyWebsiteURL,
 		JDURL:             canonicalURL,
+		JDText:            strings.TrimSpace(jdText),
 		Location:          strings.TrimSpace(extracted.Location),
+	}
+}
+
+func buildMutationInputFromJDText(args leadCreateFromJDTextInput, canonicalURL string, jdText string, extracted jdExtraction) model.LeadMutationInput {
+	source := strings.TrimSpace(args.Source)
+	if source == "" {
+		source = "JD 粘贴"
+	}
+
+	status := strings.TrimSpace(args.Status)
+	if status == "" {
+		status = "new"
+	}
+
+	priority := 3
+	if args.Priority != nil {
+		priority = *args.Priority
+	}
+	if priority < 0 {
+		priority = 0
+	}
+
+	nextAction := strings.TrimSpace(args.NextAction)
+	if nextAction == "" {
+		nextAction = "阅读岗位要求并准备定制化简历投递"
+	}
+
+	company := firstNonEmpty(strings.TrimSpace(args.Company), strings.TrimSpace(extracted.Company), "待确认公司")
+	position := firstNonEmpty(strings.TrimSpace(args.Position), strings.TrimSpace(extracted.Position), "待确认岗位")
+	location := firstNonEmpty(strings.TrimSpace(args.Location), strings.TrimSpace(extracted.Location))
+	companyWebsiteURL := firstNonEmpty(strings.TrimSpace(args.CompanyWebsiteURL), companyWebsiteFromURL(canonicalURL))
+	notes := buildLeadNotesFromText(extracted, jdText, strings.TrimSpace(args.Notes))
+	jdURL := canonicalURL
+	if jdURL == "" {
+		jdURL = strings.TrimSpace(args.JDURL)
+	}
+
+	return model.LeadMutationInput{
+		Company:           company,
+		Position:          position,
+		Source:            source,
+		Status:            status,
+		Priority:          priority,
+		NextAction:        nextAction,
+		Notes:             notes,
+		CompanyWebsiteURL: companyWebsiteURL,
+		JDURL:             jdURL,
+		JDText:            strings.TrimSpace(jdText),
+		Location:          location,
 	}
 }
 
@@ -911,15 +1116,58 @@ func mergeForUpdate(existing model.Lead, parsed model.LeadMutationInput, args le
 		Status:            existing.Status,
 		Priority:          existing.Priority,
 		NextAction:        existing.NextAction,
+		NextActionAt:      existing.NextActionAt,
+		InterviewAt:       existing.InterviewAt,
+		ReminderMethods:   append([]string(nil), existing.ReminderMethods...),
 		Notes:             mergeNotes(existing.Notes, parsed.Notes),
 		CompanyWebsiteURL: firstNonEmpty(parsed.CompanyWebsiteURL, existing.CompanyWebsiteURL),
 		JDURL:             firstNonEmpty(parsed.JDURL, existing.JDURL),
+		JDText:            firstNonEmpty(parsed.JDText, existing.JDText),
 		Location:          firstNonEmpty(parsed.Location, existing.Location),
 	}
 
 	if status := strings.TrimSpace(args.Status); status != "" {
 		merged.Status = status
 	} else if merged.Status == "" {
+		merged.Status = parsed.Status
+	}
+
+	if args.Priority != nil {
+		merged.Priority = *args.Priority
+	} else if merged.Priority == 0 {
+		merged.Priority = parsed.Priority
+	}
+
+	if nextAction := strings.TrimSpace(args.NextAction); nextAction != "" {
+		merged.NextAction = nextAction
+	} else if strings.TrimSpace(merged.NextAction) == "" {
+		merged.NextAction = parsed.NextAction
+	}
+
+	return merged
+}
+
+func mergeForJDTextUpdate(existing model.Lead, parsed model.LeadMutationInput, args leadCreateFromJDTextInput) model.LeadMutationInput {
+	merged := model.LeadMutationInput{
+		Company:           firstNonEmpty(parsed.Company, existing.Company),
+		Position:          firstNonEmpty(parsed.Position, existing.Position),
+		Source:            firstNonEmpty(parsed.Source, existing.Source),
+		Status:            existing.Status,
+		Priority:          existing.Priority,
+		NextAction:        existing.NextAction,
+		NextActionAt:      existing.NextActionAt,
+		InterviewAt:       existing.InterviewAt,
+		ReminderMethods:   append([]string(nil), existing.ReminderMethods...),
+		Notes:             mergeNotes(existing.Notes, parsed.Notes),
+		CompanyWebsiteURL: firstNonEmpty(parsed.CompanyWebsiteURL, existing.CompanyWebsiteURL),
+		JDURL:             firstNonEmpty(parsed.JDURL, existing.JDURL),
+		JDText:            firstNonEmpty(parsed.JDText, existing.JDText),
+		Location:          firstNonEmpty(parsed.Location, existing.Location),
+	}
+
+	if status := strings.TrimSpace(args.Status); status != "" {
+		merged.Status = status
+	} else if strings.TrimSpace(merged.Status) == "" {
 		merged.Status = parsed.Status
 	}
 
@@ -951,6 +1199,24 @@ func mergeNotes(existing string, parsed string) string {
 		return existing
 	}
 	return strings.TrimSpace(existing + "\n\n---\n" + parsed)
+}
+
+func buildLeadNotesFromText(extracted jdExtraction, jdText string, userNotes string) string {
+	segments := make([]string, 0, 5)
+	segments = append(segments, fmt.Sprintf("解析来源: %s (confidence=%.2f)", extracted.Parser, clampConfidence(extracted.Confidence)))
+	if extracted.Description != "" {
+		segments = append(segments, "职位描述: "+truncateText(extracted.Description, 1600))
+	}
+	if extracted.Requirements != "" {
+		segments = append(segments, "职位要求: "+truncateText(extracted.Requirements, 1600))
+	}
+	if trimmedJD := strings.TrimSpace(jdText); trimmedJD != "" {
+		segments = append(segments, "JD原文摘录: "+truncateText(trimmedJD, 2000))
+	}
+	if strings.TrimSpace(userNotes) != "" {
+		segments = append(segments, "补充备注: "+strings.TrimSpace(userNotes))
+	}
+	return strings.Join(segments, "\n\n")
 }
 
 func buildLeadNotes(extracted jdExtraction) string {

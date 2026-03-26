@@ -15,6 +15,7 @@ type Lead struct {
 	Notes             string   `json:"notes"`
 	CompanyWebsiteURL string   `json:"company_website_url"`
 	JDURL             string   `json:"jd_url"`
+	JDText            string   `json:"jd_text"`
 	Location          string   `json:"location"`
 	CreatedAt         string   `json:"created_at,omitempty"`
 	UpdatedAt         string   `json:"updated_at,omitempty"`
@@ -34,6 +35,7 @@ type LeadMutationInput struct {
 	Notes             string   `json:"notes"`
 	CompanyWebsiteURL string   `json:"company_website_url"`
 	JDURL             string   `json:"jd_url"`
+	JDText            string   `json:"jd_text"`
 	Location          string   `json:"location"`
 }
 

@@ -257,6 +257,7 @@ func NormalizeMutationInput(input model.LeadMutationInput) (model.LeadMutationIn
 	input.Notes = strings.TrimSpace(input.Notes)
 	input.CompanyWebsiteURL = strings.TrimSpace(input.CompanyWebsiteURL)
 	input.JDURL = strings.TrimSpace(input.JDURL)
+	input.JDText = strings.TrimSpace(input.JDText)
 	input.Location = strings.TrimSpace(input.Location)
 
 	if input.Company == "" {

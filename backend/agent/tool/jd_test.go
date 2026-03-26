@@ -87,6 +87,9 @@ func TestLeadCreateFromJDURLTool_CreateFromJSONLD(t *testing.T) {
 	if strings.Contains(payload.Lead.JDURL, "utm_source") {
 		t.Fatalf("expected canonical jd_url without tracking params, got %q", payload.Lead.JDURL)
 	}
+	if payload.Lead.JDText == "" {
+		t.Fatal("expected jd_text stored from fetched page, got empty")
+	}
 }
 
 func TestLeadCreateFromJDURLTool_UpsertByCanonicalURL(t *testing.T) {
@@ -266,6 +269,119 @@ func TestLeadCreateFromJDURLTool_PrefersLLMExtraction(t *testing.T) {
 	}
 }
 
+func TestLeadCreateFromJDTextTool_CreateWithoutURL(t *testing.T) {
+	t.Parallel()
+
+	manager := &testLeadManager{}
+	tool := &leadCreateFromJDTextTool{
+		manager: manager,
+		extractor: &stubJDExtractor{
+			result: jdExtraction{
+				Company:      "OpenAI",
+				Position:     "Agent Engineer",
+				Location:     "Remote",
+				Description:  "负责构建 Agent 平台",
+				Requirements: "熟悉 Go 与分布式系统",
+				Parser:       "llm_jina",
+				Confidence:   0.93,
+			},
+		},
+	}
+
+	output, err := tool.Run(context.Background(), mustJSON(t, map[string]any{
+		"jd_text": "公司：OpenAI\n职位：Agent Engineer\n地点：Remote\n职位描述：负责构建 Agent 平台。",
+		"source":  "Boss直聘",
+	}))
+	if err != nil {
+		t.Fatalf("run tool failed: %v", err)
+	}
+
+	var payload struct {
+		Action string     `json:"action"`
+		Lead   model.Lead `json:"lead"`
+		Parsed struct {
+			Parser string `json:"parser"`
+		} `json:"parsed"`
+	}
+	if err := json.Unmarshal([]byte(output), &payload); err != nil {
+		t.Fatalf("decode output failed: %v", err)
+	}
+
+	if payload.Action != "created" {
+		t.Fatalf("expected action=created, got %q", payload.Action)
+	}
+	if payload.Lead.Company != "OpenAI" {
+		t.Fatalf("expected company from jd text, got %q", payload.Lead.Company)
+	}
+	if payload.Lead.Position != "Agent Engineer" {
+		t.Fatalf("expected position from jd text, got %q", payload.Lead.Position)
+	}
+	if payload.Lead.Source != "Boss直聘" {
+		t.Fatalf("expected source persisted, got %q", payload.Lead.Source)
+	}
+	if payload.Lead.JDURL != "" {
+		t.Fatalf("expected empty jd_url when omitted, got %q", payload.Lead.JDURL)
+	}
+	if !strings.Contains(payload.Lead.JDText, "公司：OpenAI") {
+		t.Fatalf("expected jd_text persisted from manual input, got %q", payload.Lead.JDText)
+	}
+	if !strings.Contains(payload.Lead.Notes, "JD原文摘录") {
+		t.Fatalf("expected notes include jd snippet, got %q", payload.Lead.Notes)
+	}
+	if payload.Parsed.Parser != "llm_jina" {
+		t.Fatalf("expected parser llm_jina, got %q", payload.Parsed.Parser)
+	}
+}
+
+func TestLeadCreateFromJDTextTool_UpsertByCanonicalURLWhenProvided(t *testing.T) {
+	t.Parallel()
+
+	manager := &testLeadManager{}
+	tool := &leadCreateFromJDTextTool{
+		manager: manager,
+		extractor: &stubJDExtractor{
+			result: jdExtraction{
+				Company:    "Example Corp",
+				Position:   "Backend Engineer",
+				Location:   "Shanghai",
+				Parser:     "llm_jina",
+				Confidence: 0.84,
+			},
+		},
+	}
+
+	firstOutput, err := tool.Run(context.Background(), mustJSON(t, map[string]any{
+		"jd_text": "职位：Backend Engineer",
+		"jd_url":  "https://jobs.example.com/position/123?utm_source=a",
+	}))
+	if err != nil {
+		t.Fatalf("first run failed: %v", err)
+	}
+	if !strings.Contains(firstOutput, `"action":"created"`) {
+		t.Fatalf("expected first action created, got %s", firstOutput)
+	}
+
+	secondOutput, err := tool.Run(context.Background(), mustJSON(t, map[string]any{
+		"jd_text":     "职位：Backend Engineer（更新版）",
+		"jd_url":      "https://jobs.example.com/position/123?utm_source=b",
+		"next_action": "准备定制化投递材料",
+	}))
+	if err != nil {
+		t.Fatalf("second run failed: %v", err)
+	}
+	if !strings.Contains(secondOutput, `"action":"updated"`) {
+		t.Fatalf("expected second action updated, got %s", secondOutput)
+	}
+
+	leads := manager.List()
+	if len(leads) != 1 {
+		t.Fatalf("expected one lead after upsert, got %d", len(leads))
+	}
+	if leads[0].NextAction != "准备定制化投递材料" {
+		t.Fatalf("expected next_action updated, got %q", leads[0].NextAction)
+	}
+}
+
 func TestParseJDLLMOutput_WithCodeFence(t *testing.T) {
 	t.Parallel()
 
@@ -339,6 +455,7 @@ func (m *testLeadManager) Create(input model.LeadMutationInput) (model.Lead, err
 		Notes:             input.Notes,
 		CompanyWebsiteURL: input.CompanyWebsiteURL,
 		JDURL:             input.JDURL,
+		JDText:            input.JDText,
 		Location:          input.Location,
 		CreatedAt:         time.Now().UTC().Format(time.RFC3339),
 		UpdatedAt:         time.Now().UTC().Format(time.RFC3339),
@@ -361,6 +478,7 @@ func (m *testLeadManager) Update(id string, input model.LeadMutationInput) (mode
 		m.leads[i].Notes = input.Notes
 		m.leads[i].CompanyWebsiteURL = input.CompanyWebsiteURL
 		m.leads[i].JDURL = input.JDURL
+		m.leads[i].JDText = input.JDText
 		m.leads[i].Location = input.Location
 		m.leads[i].UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 		return m.leads[i], true, nil

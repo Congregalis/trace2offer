@@ -25,6 +25,7 @@ export interface Lead {
   notes: string;
   companyWebsiteUrl: string;
   jdUrl: string;
+  jdText: string;
   location: string;
   createdAt: string;
   updatedAt: string;
@@ -43,6 +44,7 @@ export interface LeadMutationInput {
   notes: string;
   companyWebsiteUrl: string;
   jdUrl: string;
+  jdText: string;
   location: string;
 }
 
