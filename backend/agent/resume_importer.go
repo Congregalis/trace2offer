@@ -23,7 +23,7 @@ import (
 
 const (
 	maxResumeFileSizeBytes = 8 * 1024 * 1024
-	maxResumeTextRunes     = 24000
+	maxResumeTextRunes     = 80000
 )
 
 var (
@@ -34,7 +34,6 @@ var (
 
 	resumeJSONObjectPattern = regexp.MustCompile(`(?s)\{.*\}`)
 	xmlTagPattern           = regexp.MustCompile(`(?s)<[^>]+>`)
-	multiWhitespacePattern  = regexp.MustCompile(`[\t\f\v ]+`)
 )
 
 // ResumeImportError means client input is invalid for resume import.
@@ -56,13 +55,16 @@ func IsResumeImportError(err error) bool {
 
 // UserProfileImportResult returns both merged and extracted profile.
 type UserProfileImportResult struct {
-	Profile      UserProfile `json:"profile"`
-	Extracted    UserProfile `json:"extracted"`
-	SourceName   string      `json:"source_name"`
-	ContentType  string      `json:"content_type"`
-	TextLength   int         `json:"text_length"`
-	Truncated    bool        `json:"truncated"`
-	ExtractModel string      `json:"extract_model"`
+	Profile          UserProfile `json:"profile"`
+	Extracted        UserProfile `json:"extracted"`
+	SourceName       string      `json:"source_name"`
+	ContentType      string      `json:"content_type"`
+	TextLength       int         `json:"text_length"`
+	Truncated        bool        `json:"truncated"`
+	ExtractModel     string      `json:"extract_model"`
+	ResumePath       string      `json:"resume_path"`
+	ResumeTotalChars int         `json:"resume_total_chars"`
+	ResumeTruncated  bool        `json:"resume_truncated"`
 }
 
 type resumeImporter struct {
@@ -85,7 +87,7 @@ const resumeProfileExtractionPrompt = `你是“简历能力画像抽取器”�
 规则：
 1) 只输出一个 JSON 对象，不要 markdown，不要解释。
 2) 只允许以下字段：
-name,current_title,total_years,primary_industry,industries,core_skills,tooling,programming_languages,domain_knowledge,project_evidence,achievements,education,certifications,preferred_roles,preferred_industries,preferred_locations,remote_preference,employment_types,salary_expectation,work_authorization,visa_needs,preferred_company_stages,excluded_companies,job_search_priorities,strength_summary,portfolio_links,notes。
+name,current_title,total_years,core_skills,programming_languages,project_evidence,preferred_roles,preferred_locations,job_search_priorities,strength_summary。
 3) 列表字段必须是字符串数组，total_years 必须是数字，其他字段是字符串。
 4) 缺失信息返回空字符串、0 或空数组。
 5) 不得编造简历中不存在的信息。`
@@ -147,33 +149,16 @@ func parseResumeProfileOutput(raw string) (UserProfile, error) {
 	}
 
 	profile := UserProfile{
-		Name:                   readAnyString(payload["name"]),
-		CurrentTitle:           readAnyString(payload["current_title"]),
-		TotalYears:             readAnyNumber(payload["total_years"]),
-		PrimaryIndustry:        readAnyString(payload["primary_industry"]),
-		Industries:             readAnyStringList(payload["industries"]),
-		CoreSkills:             readAnyStringList(payload["core_skills"]),
-		Tooling:                readAnyStringList(payload["tooling"]),
-		ProgrammingLanguages:   readAnyStringList(payload["programming_languages"]),
-		DomainKnowledge:        readAnyStringList(payload["domain_knowledge"]),
-		ProjectEvidence:        readAnyStringList(payload["project_evidence"]),
-		Achievements:           readAnyStringList(payload["achievements"]),
-		Education:              readAnyStringList(payload["education"]),
-		Certifications:         readAnyStringList(payload["certifications"]),
-		PreferredRoles:         readAnyStringList(payload["preferred_roles"]),
-		PreferredIndustries:    readAnyStringList(payload["preferred_industries"]),
-		PreferredLocations:     readAnyStringList(payload["preferred_locations"]),
-		RemotePreference:       readAnyString(payload["remote_preference"]),
-		EmploymentTypes:        readAnyStringList(payload["employment_types"]),
-		SalaryExpectation:      readAnyString(payload["salary_expectation"]),
-		WorkAuthorization:      readAnyString(payload["work_authorization"]),
-		VisaNeeds:              readAnyString(payload["visa_needs"]),
-		PreferredCompanyStages: readAnyStringList(payload["preferred_company_stages"]),
-		ExcludedCompanies:      readAnyStringList(payload["excluded_companies"]),
-		JobSearchPriorities:    readAnyStringList(payload["job_search_priorities"]),
-		StrengthSummary:        readAnyString(payload["strength_summary"]),
-		PortfolioLinks:         readAnyStringList(payload["portfolio_links"]),
-		Notes:                  readAnyString(payload["notes"]),
+		Name:                 readAnyString(payload["name"]),
+		CurrentTitle:         readAnyString(payload["current_title"]),
+		TotalYears:           readAnyNumber(payload["total_years"]),
+		CoreSkills:           readAnyStringList(payload["core_skills"]),
+		ProgrammingLanguages: readAnyStringList(payload["programming_languages"]),
+		ProjectEvidence:      readAnyStringList(payload["project_evidence"]),
+		PreferredRoles:       readAnyStringList(payload["preferred_roles"]),
+		PreferredLocations:   readAnyStringList(payload["preferred_locations"]),
+		JobSearchPriorities:  readAnyStringList(payload["job_search_priorities"]),
+		StrengthSummary:      readAnyString(payload["strength_summary"]),
 	}
 
 	return normalizeUserProfile(profile), nil
@@ -296,18 +281,36 @@ func normalizeResumeText(raw string) string {
 	if strings.TrimSpace(raw) == "" {
 		return ""
 	}
-	lines := strings.Split(strings.ReplaceAll(raw, "\r\n", "\n"), "\n")
+	normalized := strings.ReplaceAll(raw, "\r\n", "\n")
+	normalized = strings.ReplaceAll(normalized, "\r", "\n")
+	lines := strings.Split(normalized, "\n")
 	result := make([]string, 0, len(lines))
+	prevEmpty := false
 	for _, line := range lines {
 		line = html.UnescapeString(line)
-		line = multiWhitespacePattern.ReplaceAllString(line, " ")
 		line = strings.TrimSpace(line)
 		if line == "" {
+			if prevEmpty {
+				continue
+			}
+			if len(result) == 0 {
+				prevEmpty = true
+				continue
+			}
+			result = append(result, "")
+			prevEmpty = true
 			continue
 		}
 		result = append(result, line)
+		prevEmpty = false
 	}
-	return strings.TrimSpace(strings.Join(result, "\n"))
+	for len(result) > 0 && result[len(result)-1] == "" {
+		result = result[:len(result)-1]
+	}
+	if len(result) == 0 {
+		return ""
+	}
+	return strings.Join(result, "\n")
 }
 
 func truncateByRunes(text string, maxRunes int) string {

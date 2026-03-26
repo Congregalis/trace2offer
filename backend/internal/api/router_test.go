@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/textproto"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -524,6 +526,44 @@ func TestLeadAndChatAPI(t *testing.T) {
 		t.Fatalf("PUT /api/user/profile status=%d body=%s", resp.Code, resp.Body.String())
 	}
 
+	resp = doMultipartFileRequest(
+		t,
+		router,
+		http.MethodPost,
+		"/api/user/profile/import",
+		"resume",
+		"resume.txt",
+		"text/plain",
+		[]byte("Go engineer\n\nplatform"),
+	)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("POST /api/user/profile/import status=%d body=%s", resp.Code, resp.Body.String())
+	}
+
+	var importPayload struct {
+		Data struct {
+			ResumePath       string `json:"resume_path"`
+			ResumeTotalChars int    `json:"resume_total_chars"`
+			ResumeTruncated  bool   `json:"resume_truncated"`
+			Profile          struct {
+				Name string `json:"name"`
+			} `json:"profile"`
+		} `json:"data"`
+	}
+	decodeJSONBody(t, resp, &importPayload)
+	if importPayload.Data.ResumePath == "" {
+		t.Fatal("expected import response resume_path not empty")
+	}
+	if importPayload.Data.ResumeTotalChars == 0 {
+		t.Fatal("expected import response resume_total_chars > 0")
+	}
+	if importPayload.Data.ResumeTruncated {
+		t.Fatal("expected import response resume_truncated=false")
+	}
+	if importPayload.Data.Profile.Name == "" {
+		t.Fatal("expected import response profile name not empty")
+	}
+
 	resp = doJSONRequest(t, router, http.MethodGet, "/api/stats", nil)
 	if resp.Code != http.StatusOK {
 		t.Fatalf("GET /api/stats status=%d body=%s", resp.Code, resp.Body.String())
@@ -724,13 +764,16 @@ func (s *stubAgentRuntime) ImportUserProfileFromResume(_ context.Context, source
 	}
 	s.profile = extracted
 	return agentruntime.UserProfileImportResult{
-		Profile:      s.profile,
-		Extracted:    extracted,
-		SourceName:   sourceName,
-		ContentType:  contentType,
-		TextLength:   10,
-		Truncated:    false,
-		ExtractModel: "gpt-5-mini",
+		Profile:          s.profile,
+		Extracted:        extracted,
+		SourceName:       sourceName,
+		ContentType:      contentType,
+		TextLength:       10,
+		Truncated:        false,
+		ExtractModel:     "gpt-5-mini",
+		ResumePath:       "/tmp/resume/current.md",
+		ResumeTotalChars: 1024,
+		ResumeTruncated:  false,
 	}, nil
 }
 
@@ -768,6 +811,36 @@ func doJSONRequest(t *testing.T, router http.Handler, method string, path string
 
 	req := httptest.NewRequest(method, path, reader)
 	req.Header.Set("Content-Type", "application/json")
+
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	return resp
+}
+
+func doMultipartFileRequest(t *testing.T, router http.Handler, method string, path string, field string, filename string, contentType string, content []byte) *httptest.ResponseRecorder {
+	t.Helper()
+
+	payload := &bytes.Buffer{}
+	writer := multipart.NewWriter(payload)
+	header := textproto.MIMEHeader{}
+	header.Set("Content-Disposition", `form-data; name="`+field+`"; filename="`+filename+`"`)
+	if strings.TrimSpace(contentType) == "" {
+		contentType = "application/octet-stream"
+	}
+	header.Set("Content-Type", contentType)
+	part, err := writer.CreatePart(header)
+	if err != nil {
+		t.Fatalf("create form file: %v", err)
+	}
+	if _, err := part.Write(content); err != nil {
+		t.Fatalf("write form file: %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("close multipart writer: %v", err)
+	}
+
+	req := httptest.NewRequest(method, path, payload)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
 
 	resp := httptest.NewRecorder()
 	router.ServeHTTP(resp, req)

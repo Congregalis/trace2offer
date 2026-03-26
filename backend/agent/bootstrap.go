@@ -16,17 +16,18 @@ import (
 
 // BootstrapConfig wires minimal runtime dependencies.
 type BootstrapConfig struct {
-	SessionDataPath  string
-	MemoryDataPath   string
-	LeadManager      lead.Manager
-	CandidateManager candidate.Manager
-	StatsProvider    tool.StatsSummaryProvider
-	UserProfiles     *UserProfileManager
-	AgentConfig      Config
-	OpenAIAPIKey     string
-	OpenAIModel      string
-	OpenAIBaseURL    string
-	OpenAITimeout    time.Duration
+	SessionDataPath    string
+	MemoryDataPath     string
+	LeadManager        lead.Manager
+	CandidateManager   candidate.Manager
+	StatsProvider      tool.StatsSummaryProvider
+	ResumeSourceReader tool.ResumeSourceProvider
+	UserProfiles       *UserProfileManager
+	AgentConfig        Config
+	OpenAIAPIKey       string
+	OpenAIModel        string
+	OpenAIBaseURL      string
+	OpenAITimeout      time.Duration
 }
 
 // NewDefaultRuntime builds a minimal runtime with OpenAI Responses provider.
@@ -78,12 +79,14 @@ func NewDefaultRuntime(config BootstrapConfig) (*Runtime, error) {
 
 	// Think tool (for complex reasoning)
 	thinkTools := []tool.Tool{&tool.ThinkTool{}}
+	resumeTools := tool.NewResumeTools(config.ResumeSourceReader)
 
 	allTools := make([]tool.Tool, 0)
 	allTools = append(allTools, leadTools...)
 	allTools = append(allTools, candidateTools...)
 	allTools = append(allTools, searchTools...)
 	allTools = append(allTools, thinkTools...)
+	allTools = append(allTools, resumeTools...)
 	allTools = append(allTools, tool.NewInsightTools(config.StatsProvider)...)
 	registry, err := tool.NewRegistry(allTools...)
 	if err != nil {

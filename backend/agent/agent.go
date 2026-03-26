@@ -41,6 +41,7 @@ func DefaultConfig() Config {
 - 创建线索 → 用 lead_create / lead_create_from_jd_url / lead_create_from_jd_text
 - 管理候选池 → 用 candidate_list / candidate_create / candidate_update / candidate_delete
 - 候选转线索 → 用 candidate_promote
+- 读取完整简历事实源 → 用 resume_get
 - 查看统计 → 用 stats_summary 或 job_search_strategy
 - 复杂推理 → 用 think（分析、对比、制定策略时使用）
 

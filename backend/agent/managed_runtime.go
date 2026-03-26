@@ -22,6 +22,7 @@ type ManagedRuntimeConfig struct {
 	SessionDataPath     string
 	MemoryDataPath      string
 	UserProfileDataPath string
+	ResumeDataDir       string
 	LeadManager         lead.Manager
 	CandidateManager    candidate.Manager
 	StatsProvider       tool.StatsSummaryProvider
@@ -35,6 +36,7 @@ type ManagedRuntime struct {
 	settings     RuntimeSettings
 	runtime      *Runtime
 	userProfiles *UserProfileManager
+	resumeSource *FileResumeSourceStore
 
 	sessionDataPath  string
 	memoryDataPath   string
@@ -56,6 +58,9 @@ func NewManagedRuntime(config ManagedRuntimeConfig) (*ManagedRuntime, error) {
 	if strings.TrimSpace(config.UserProfileDataPath) == "" {
 		return nil, &SettingsValidationError{Field: "user_profile_data_path", Message: "user profile data path is required"}
 	}
+	if strings.TrimSpace(config.ResumeDataDir) == "" {
+		return nil, &SettingsValidationError{Field: "resume_data_dir", Message: "resume data dir is required"}
+	}
 	if config.LeadManager == nil {
 		return nil, &SettingsValidationError{Field: "lead_manager", Message: "lead manager is required"}
 	}
@@ -65,6 +70,10 @@ func NewManagedRuntime(config ManagedRuntimeConfig) (*ManagedRuntime, error) {
 		return nil, err
 	}
 	profileManager := NewUserProfileManager(profileStore)
+	resumeSourceStore, err := NewFileResumeSourceStore(config.ResumeDataDir)
+	if err != nil {
+		return nil, err
+	}
 
 	defaults := mergeRuntimeSettings(defaultRuntimeSettings(), config.Defaults)
 	store, err := newRuntimeSettingsStore(config.SettingsPath)
@@ -88,6 +97,7 @@ func NewManagedRuntime(config ManagedRuntimeConfig) (*ManagedRuntime, error) {
 		candidateManager: config.CandidateManager,
 		statsProvider:    config.StatsProvider,
 		userProfiles:     profileManager,
+		resumeSource:     resumeSourceStore,
 	}
 
 	runtime, err := manager.buildRuntime(settings)
@@ -221,8 +231,15 @@ func (m *ManagedRuntime) ImportUserProfileFromResume(ctx context.Context, source
 	if m.userProfiles == nil {
 		return UserProfileImportResult{}, ErrUserProfileStoreUnavailable
 	}
+	if m.resumeSource == nil {
+		return UserProfileImportResult{}, ErrResumeSourceUnavailable
+	}
 
 	resumeText, err := extractResumeText(sourceName, contentType, content)
+	if err != nil {
+		return UserProfileImportResult{}, err
+	}
+	snapshot, err := m.resumeSource.Save(sourceName, contentType, resumeText)
 	if err != nil {
 		return UserProfileImportResult{}, err
 	}
@@ -236,7 +253,7 @@ func (m *ManagedRuntime) ImportUserProfileFromResume(ctx context.Context, source
 	}
 
 	importer := newResumeImporter(runtime.provider, model)
-	extracted, truncated, err := importer.Import(ctx, resumeText)
+	extracted, truncated, err := importer.Import(ctx, snapshot.Content)
 	if err != nil {
 		return UserProfileImportResult{}, err
 	}
@@ -247,23 +264,27 @@ func (m *ManagedRuntime) ImportUserProfileFromResume(ctx context.Context, source
 	}
 
 	return UserProfileImportResult{
-		Profile:      merged,
-		Extracted:    imported,
-		SourceName:   strings.TrimSpace(sourceName),
-		ContentType:  strings.TrimSpace(contentType),
-		TextLength:   utf8.RuneCountInString(resumeText),
-		Truncated:    truncated,
-		ExtractModel: model,
+		Profile:          merged,
+		Extracted:        imported,
+		SourceName:       strings.TrimSpace(sourceName),
+		ContentType:      strings.TrimSpace(contentType),
+		TextLength:       utf8.RuneCountInString(snapshot.Content),
+		Truncated:        truncated,
+		ExtractModel:     model,
+		ResumePath:       snapshot.Path,
+		ResumeTotalChars: snapshot.TotalChars,
+		ResumeTruncated:  snapshot.Truncated,
 	}, nil
 }
 
 func (m *ManagedRuntime) buildRuntime(settings RuntimeSettings) (*Runtime, error) {
 	return NewDefaultRuntime(BootstrapConfig{
-		SessionDataPath:  m.sessionDataPath,
-		MemoryDataPath:   m.memoryDataPath,
-		LeadManager:      m.leadManager,
-		CandidateManager: m.candidateManager,
-		StatsProvider:    m.statsProvider,
+		SessionDataPath:    m.sessionDataPath,
+		MemoryDataPath:     m.memoryDataPath,
+		LeadManager:        m.leadManager,
+		CandidateManager:   m.candidateManager,
+		StatsProvider:      m.statsProvider,
+		ResumeSourceReader: m.resumeSource,
 		AgentConfig: Config{
 			Model:        settings.Model,
 			MaxSteps:     settings.MaxSteps,

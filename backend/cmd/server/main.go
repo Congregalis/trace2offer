@@ -88,6 +88,7 @@ func main() {
 		SessionDataPath:     getenv("T2O_AGENT_SESSION_DATA", filepath.Join(dataDir, "sessions")),
 		MemoryDataPath:      getenv("T2O_AGENT_MEMORY_DATA", filepath.Join(dataDir, "agent_memory.json")),
 		UserProfileDataPath: getenv("T2O_AGENT_USER_PROFILE_DATA", filepath.Join(dataDir, "user_profile.json")),
+		ResumeDataDir:       getenv("T2O_AGENT_RESUME_DATA_DIR", filepath.Join(dataDir, "resume")),
 		LeadManager:         leadManager,
 		CandidateManager:    candidateManager,
 		StatsProvider:       statsService,

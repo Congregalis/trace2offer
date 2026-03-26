@@ -54,30 +54,13 @@ interface UserProfileView {
   name: string;
   current_title: string;
   total_years: number;
-  primary_industry: string;
-  industries: string[];
   core_skills: string[];
-  tooling: string[];
   programming_languages: string[];
-  domain_knowledge: string[];
   project_evidence: string[];
-  achievements: string[];
-  education: string[];
-  certifications: string[];
   preferred_roles: string[];
-  preferred_industries: string[];
   preferred_locations: string[];
-  remote_preference: string;
-  employment_types: string[];
-  salary_expectation: string;
-  work_authorization: string;
-  visa_needs: string;
-  preferred_company_stages: string[];
-  excluded_companies: string[];
   job_search_priorities: string[];
   strength_summary: string;
-  portfolio_links: string[];
-  notes: string;
   updated_at?: string;
 }
 
@@ -85,30 +68,13 @@ interface UserProfileForm {
   name: string;
   currentTitle: string;
   totalYears: string;
-  primaryIndustry: string;
-  industries: string;
   coreSkills: string;
-  tooling: string;
   programmingLanguages: string;
-  domainKnowledge: string;
   projectEvidence: string;
-  achievements: string;
-  education: string;
-  certifications: string;
   preferredRoles: string;
-  preferredIndustries: string;
   preferredLocations: string;
-  remotePreference: string;
-  employmentTypes: string;
-  salaryExpectation: string;
-  workAuthorization: string;
-  visaNeeds: string;
-  preferredCompanyStages: string;
-  excludedCompanies: string;
   jobSearchPriorities: string;
   strengthSummary: string;
-  portfolioLinks: string;
-  notes: string;
 }
 
 interface UserProfileImportView {
@@ -119,6 +85,9 @@ interface UserProfileImportView {
   text_length: number;
   truncated: boolean;
   extract_model: string;
+  resume_path?: string;
+  resume_total_chars?: number;
+  resume_truncated?: boolean;
 }
 
 interface APIErrorPayload {
@@ -150,30 +119,13 @@ const emptyUserProfileForm: UserProfileForm = {
   name: "",
   currentTitle: "",
   totalYears: "",
-  primaryIndustry: "",
-  industries: "",
   coreSkills: "",
-  tooling: "",
   programmingLanguages: "",
-  domainKnowledge: "",
   projectEvidence: "",
-  achievements: "",
-  education: "",
-  certifications: "",
   preferredRoles: "",
-  preferredIndustries: "",
   preferredLocations: "",
-  remotePreference: "",
-  employmentTypes: "",
-  salaryExpectation: "",
-  workAuthorization: "",
-  visaNeeds: "",
-  preferredCompanyStages: "",
-  excludedCompanies: "",
   jobSearchPriorities: "",
   strengthSummary: "",
-  portfolioLinks: "",
-  notes: "",
 };
 
 function getAPIURL(path: string): string {
@@ -232,30 +184,13 @@ function toProfileForm(profile: UserProfileView): UserProfileForm {
     name: profile.name || "",
     currentTitle: profile.current_title || "",
     totalYears: profile.total_years > 0 ? String(profile.total_years) : "",
-    primaryIndustry: profile.primary_industry || "",
-    industries: listToMultiline(profile.industries),
     coreSkills: listToMultiline(profile.core_skills),
-    tooling: listToMultiline(profile.tooling),
     programmingLanguages: listToMultiline(profile.programming_languages),
-    domainKnowledge: listToMultiline(profile.domain_knowledge),
     projectEvidence: listToMultiline(profile.project_evidence),
-    achievements: listToMultiline(profile.achievements),
-    education: listToMultiline(profile.education),
-    certifications: listToMultiline(profile.certifications),
     preferredRoles: listToMultiline(profile.preferred_roles),
-    preferredIndustries: listToMultiline(profile.preferred_industries),
     preferredLocations: listToMultiline(profile.preferred_locations),
-    remotePreference: profile.remote_preference || "",
-    employmentTypes: listToMultiline(profile.employment_types),
-    salaryExpectation: profile.salary_expectation || "",
-    workAuthorization: profile.work_authorization || "",
-    visaNeeds: profile.visa_needs || "",
-    preferredCompanyStages: listToMultiline(profile.preferred_company_stages),
-    excludedCompanies: listToMultiline(profile.excluded_companies),
     jobSearchPriorities: listToMultiline(profile.job_search_priorities),
     strengthSummary: profile.strength_summary || "",
-    portfolioLinks: listToMultiline(profile.portfolio_links),
-    notes: profile.notes || "",
   };
 }
 
@@ -265,30 +200,13 @@ function toProfilePayload(form: UserProfileForm): UserProfileView {
     name: form.name.trim(),
     current_title: form.currentTitle.trim(),
     total_years: Number.isFinite(parsedYears) && parsedYears > 0 ? parsedYears : 0,
-    primary_industry: form.primaryIndustry.trim(),
-    industries: multilineToList(form.industries),
     core_skills: multilineToList(form.coreSkills),
-    tooling: multilineToList(form.tooling),
     programming_languages: multilineToList(form.programmingLanguages),
-    domain_knowledge: multilineToList(form.domainKnowledge),
     project_evidence: multilineToList(form.projectEvidence),
-    achievements: multilineToList(form.achievements),
-    education: multilineToList(form.education),
-    certifications: multilineToList(form.certifications),
     preferred_roles: multilineToList(form.preferredRoles),
-    preferred_industries: multilineToList(form.preferredIndustries),
     preferred_locations: multilineToList(form.preferredLocations),
-    remote_preference: form.remotePreference.trim(),
-    employment_types: multilineToList(form.employmentTypes),
-    salary_expectation: form.salaryExpectation.trim(),
-    work_authorization: form.workAuthorization.trim(),
-    visa_needs: form.visaNeeds.trim(),
-    preferred_company_stages: multilineToList(form.preferredCompanyStages),
-    excluded_companies: multilineToList(form.excludedCompanies),
     job_search_priorities: multilineToList(form.jobSearchPriorities),
     strength_summary: form.strengthSummary.trim(),
-    portfolio_links: multilineToList(form.portfolioLinks),
-    notes: form.notes.trim(),
     updated_at: "",
   };
 }
@@ -658,8 +576,8 @@ export function Chat() {
 
       setProfile(toProfileForm(body.data.profile));
       setProfileUpdatedAt(body.data.profile.updated_at || "");
-      const suffix = body.data.truncated ? "（简历较长，已截断部分内容）" : "";
-      toast.success(`简历导入完成，已自动合并到能力画像${suffix}`);
+      const suffix = body.data.truncated ? "（画像抽取时已截断部分内容）" : "";
+      toast.success(`简历导入完成，已更新能力画像与完整简历事实源${suffix}`);
     } catch (error) {
       toast.error(toErrorMessage(error, "简历导入失败"));
     } finally {
@@ -1026,15 +944,6 @@ export function Chat() {
                   disabled={isProfileLoading || isProfileSaving || isProfileImporting}
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="profile-industry">主行业</Label>
-                <Input
-                  id="profile-industry"
-                  value={profile.primaryIndustry}
-                  onChange={(e) => updateProfileField("primaryIndustry", e.target.value)}
-                  disabled={isProfileLoading || isProfileSaving || isProfileImporting}
-                />
-              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -1060,78 +969,18 @@ export function Chat() {
                   disabled={isProfileLoading || isProfileSaving || isProfileImporting}
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="profile-tooling">工具链</Label>
-                <Textarea
-                  id="profile-tooling"
-                  value={profile.tooling}
-                  onChange={(e) => updateProfileField("tooling", e.target.value)}
-                  placeholder="Kubernetes / Kafka / Terraform ..."
-                  className="min-h-[96px]"
-                  disabled={isProfileLoading || isProfileSaving || isProfileImporting}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="profile-domain">行业/业务知识</Label>
-                <Textarea
-                  id="profile-domain"
-                  value={profile.domainKnowledge}
-                  onChange={(e) => updateProfileField("domainKnowledge", e.target.value)}
-                  placeholder="支付、风控、推荐系统..."
-                  className="min-h-[96px]"
-                  disabled={isProfileLoading || isProfileSaving || isProfileImporting}
-                />
-              </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="profile-project-evidence">项目证据</Label>
-                <Textarea
-                  id="profile-project-evidence"
-                  value={profile.projectEvidence}
-                  onChange={(e) => updateProfileField("projectEvidence", e.target.value)}
-                  placeholder="每行一条：项目/成果/量化指标"
-                  className="min-h-[110px]"
-                  disabled={isProfileLoading || isProfileSaving || isProfileImporting}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="profile-achievements">关键成就</Label>
-                <Textarea
-                  id="profile-achievements"
-                  value={profile.achievements}
-                  onChange={(e) => updateProfileField("achievements", e.target.value)}
-                  placeholder="每行一条：业务影响、性能提升、成本优化..."
-                  className="min-h-[110px]"
-                  disabled={isProfileLoading || isProfileSaving || isProfileImporting}
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="profile-education">教育背景</Label>
-                <Textarea
-                  id="profile-education"
-                  value={profile.education}
-                  onChange={(e) => updateProfileField("education", e.target.value)}
-                  placeholder="每行一条"
-                  className="min-h-[96px]"
-                  disabled={isProfileLoading || isProfileSaving || isProfileImporting}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="profile-certifications">证书</Label>
-                <Textarea
-                  id="profile-certifications"
-                  value={profile.certifications}
-                  onChange={(e) => updateProfileField("certifications", e.target.value)}
-                  placeholder="每行一条"
-                  className="min-h-[96px]"
-                  disabled={isProfileLoading || isProfileSaving || isProfileImporting}
-                />
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="profile-project-evidence">项目证据</Label>
+              <Textarea
+                id="profile-project-evidence"
+                value={profile.projectEvidence}
+                onChange={(e) => updateProfileField("projectEvidence", e.target.value)}
+                placeholder="每行一条：项目/成果/量化指标"
+                className="min-h-[110px]"
+                disabled={isProfileLoading || isProfileSaving || isProfileImporting}
+              />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -1141,17 +990,6 @@ export function Chat() {
                   id="profile-preferred-roles"
                   value={profile.preferredRoles}
                   onChange={(e) => updateProfileField("preferredRoles", e.target.value)}
-                  placeholder="每行一条"
-                  className="min-h-[96px]"
-                  disabled={isProfileLoading || isProfileSaving || isProfileImporting}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="profile-preferred-industries">目标行业</Label>
-                <Textarea
-                  id="profile-preferred-industries"
-                  value={profile.preferredIndustries}
-                  onChange={(e) => updateProfileField("preferredIndustries", e.target.value)}
                   placeholder="每行一条"
                   className="min-h-[96px]"
                   disabled={isProfileLoading || isProfileSaving || isProfileImporting}
@@ -1168,107 +1006,18 @@ export function Chat() {
                   disabled={isProfileLoading || isProfileSaving || isProfileImporting}
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="profile-remote-preference">远程偏好</Label>
-                <Input
-                  id="profile-remote-preference"
-                  value={profile.remotePreference}
-                  onChange={(e) => updateProfileField("remotePreference", e.target.value)}
-                  placeholder="完全远程 / 混合 / 到岗"
-                  disabled={isProfileLoading || isProfileSaving || isProfileImporting}
-                />
-              </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="profile-employment-types">工作类型偏好</Label>
-                <Textarea
-                  id="profile-employment-types"
-                  value={profile.employmentTypes}
-                  onChange={(e) => updateProfileField("employmentTypes", e.target.value)}
-                  placeholder="全职 / 合同工 / 实习"
-                  className="min-h-[90px]"
-                  disabled={isProfileLoading || isProfileSaving || isProfileImporting}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="profile-company-stage">公司阶段偏好</Label>
-                <Textarea
-                  id="profile-company-stage"
-                  value={profile.preferredCompanyStages}
-                  onChange={(e) => updateProfileField("preferredCompanyStages", e.target.value)}
-                  placeholder="种子轮 / 成长期 / 上市公司"
-                  className="min-h-[90px]"
-                  disabled={isProfileLoading || isProfileSaving || isProfileImporting}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="profile-salary">薪资预期</Label>
-                <Input
-                  id="profile-salary"
-                  value={profile.salaryExpectation}
-                  onChange={(e) => updateProfileField("salaryExpectation", e.target.value)}
-                  placeholder="如：80k-100k USD"
-                  disabled={isProfileLoading || isProfileSaving || isProfileImporting}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="profile-work-auth">工作身份</Label>
-                <Input
-                  id="profile-work-auth"
-                  value={profile.workAuthorization}
-                  onChange={(e) => updateProfileField("workAuthorization", e.target.value)}
-                  placeholder="US Citizen / H1B Transfer ..."
-                  disabled={isProfileLoading || isProfileSaving || isProfileImporting}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="profile-visa">签证需求</Label>
-                <Input
-                  id="profile-visa"
-                  value={profile.visaNeeds}
-                  onChange={(e) => updateProfileField("visaNeeds", e.target.value)}
-                  placeholder="是否需要 sponsor"
-                  disabled={isProfileLoading || isProfileSaving || isProfileImporting}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="profile-priorities">求职优先级</Label>
-                <Textarea
-                  id="profile-priorities"
-                  value={profile.jobSearchPriorities}
-                  onChange={(e) => updateProfileField("jobSearchPriorities", e.target.value)}
-                  placeholder="成长 / 薪资 / WLB / 技术深度 ..."
-                  className="min-h-[90px]"
-                  disabled={isProfileLoading || isProfileSaving || isProfileImporting}
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="profile-portfolio">作品/链接</Label>
-                <Textarea
-                  id="profile-portfolio"
-                  value={profile.portfolioLinks}
-                  onChange={(e) => updateProfileField("portfolioLinks", e.target.value)}
-                  placeholder="GitHub / Blog / Portfolio URL"
-                  className="min-h-[90px]"
-                  disabled={isProfileLoading || isProfileSaving || isProfileImporting}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="profile-excluded-companies">避雷公司</Label>
-                <Textarea
-                  id="profile-excluded-companies"
-                  value={profile.excludedCompanies}
-                  onChange={(e) => updateProfileField("excludedCompanies", e.target.value)}
-                  placeholder="每行一条"
-                  className="min-h-[90px]"
-                  disabled={isProfileLoading || isProfileSaving || isProfileImporting}
-                />
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="profile-priorities">求职优先级</Label>
+              <Textarea
+                id="profile-priorities"
+                value={profile.jobSearchPriorities}
+                onChange={(e) => updateProfileField("jobSearchPriorities", e.target.value)}
+                placeholder="成长 / 薪资 / WLB / 技术深度 ..."
+                className="min-h-[96px]"
+                disabled={isProfileLoading || isProfileSaving || isProfileImporting}
+              />
             </div>
 
             <div className="space-y-2">
@@ -1279,18 +1028,6 @@ export function Chat() {
                 onChange={(e) => updateProfileField("strengthSummary", e.target.value)}
                 placeholder="一句话总结你的竞争力"
                 className="min-h-[90px]"
-                disabled={isProfileLoading || isProfileSaving || isProfileImporting}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="profile-notes">备注</Label>
-              <Textarea
-                id="profile-notes"
-                value={profile.notes}
-                onChange={(e) => updateProfileField("notes", e.target.value)}
-                placeholder="补充任何你想让 Agent 知道的信息"
-                className="min-h-[100px]"
                 disabled={isProfileLoading || isProfileSaving || isProfileImporting}
               />
             </div>

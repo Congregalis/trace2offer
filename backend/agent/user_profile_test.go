@@ -12,13 +12,12 @@ func TestMergeImportedUserProfile(t *testing.T) {
 		Name:               "Alice",
 		CoreSkills:         []string{"Go", "Kubernetes"},
 		PreferredLocations: []string{"Remote"},
-		Notes:              "manual",
 	}
 	imported := UserProfile{
 		CurrentTitle:       "Staff Engineer",
 		CoreSkills:         []string{"Distributed Systems", "Go"},
 		PreferredLocations: []string{"Taipei", "Remote"},
-		Notes:              "resume",
+		StrengthSummary:    "擅长复杂分布式系统拆解",
 	}
 
 	merged := mergeImportedUserProfile(base, imported)
@@ -31,8 +30,8 @@ func TestMergeImportedUserProfile(t *testing.T) {
 	if len(merged.CoreSkills) < 3 {
 		t.Fatalf("expected merged skills, got %#v", merged.CoreSkills)
 	}
-	if !strings.Contains(merged.Notes, "resume") {
-		t.Fatalf("expected imported notes first, got %q", merged.Notes)
+	if merged.StrengthSummary != "擅长复杂分布式系统拆解" {
+		t.Fatalf("expected imported strength summary, got %q", merged.StrengthSummary)
 	}
 }
 
@@ -46,7 +45,6 @@ func TestFormatUserProfilePrompt(t *testing.T) {
 		ProjectEvidence:     []string{"主导流量系统重构"},
 		PreferredRoles:      []string{"Principal Backend Engineer"},
 		StrengthSummary:     "复杂系统拆解",
-		PortfolioLinks:      []string{"https://github.com/bob"},
 		JobSearchPriorities: []string{"成长", "影响力"},
 	})
 

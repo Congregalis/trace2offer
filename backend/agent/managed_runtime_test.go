@@ -18,6 +18,7 @@ func TestManagedRuntimeUpdateSettings(t *testing.T) {
 		SessionDataPath:     filepath.Join(tmpDir, "sessions"),
 		MemoryDataPath:      filepath.Join(tmpDir, "agent_memory.json"),
 		UserProfileDataPath: filepath.Join(tmpDir, "user_profile.json"),
+		ResumeDataDir:       filepath.Join(tmpDir, "resume"),
 		LeadManager:         &stubLeadManager{},
 		Defaults: RuntimeSettings{
 			Model:                "gpt-5-mini",
@@ -83,6 +84,7 @@ func TestManagedRuntimeUpdateSettingsValidation(t *testing.T) {
 		SessionDataPath:     filepath.Join(tmpDir, "sessions"),
 		MemoryDataPath:      filepath.Join(tmpDir, "agent_memory.json"),
 		UserProfileDataPath: filepath.Join(tmpDir, "user_profile.json"),
+		ResumeDataDir:       filepath.Join(tmpDir, "resume"),
 		LeadManager:         &stubLeadManager{},
 		Defaults: RuntimeSettings{
 			Model:                "gpt-5-mini",
