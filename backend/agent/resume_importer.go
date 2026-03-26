@@ -9,11 +9,14 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/ledongthuc/pdf"
@@ -24,6 +27,11 @@ import (
 const (
 	maxResumeFileSizeBytes = 8 * 1024 * 1024
 	maxResumeTextRunes     = 80000
+
+	resumePDFExtractorLegacy  = "legacy"
+	resumePDFExtractorDocling = "docling"
+	defaultDoclingPythonBin   = "python3"
+	defaultDoclingTimeout     = 120 * time.Second
 )
 
 var (
@@ -72,6 +80,13 @@ type resumeImporter struct {
 	model         string
 }
 
+// ResumeExtractConfig controls local resume text extraction behavior.
+type ResumeExtractConfig struct {
+	PDFExtractor     string
+	DoclingPythonBin string
+	DoclingTimeout   time.Duration
+}
+
 func newResumeImporter(modelProvider provider.Provider, model string) *resumeImporter {
 	if modelProvider == nil {
 		return nil
@@ -80,6 +95,39 @@ func newResumeImporter(modelProvider provider.Provider, model string) *resumeImp
 		modelProvider: modelProvider,
 		model:         strings.TrimSpace(model),
 	}
+}
+
+func defaultResumeExtractConfig() ResumeExtractConfig {
+	return ResumeExtractConfig{
+		PDFExtractor:     resumePDFExtractorLegacy,
+		DoclingPythonBin: defaultDoclingPythonBin,
+		DoclingTimeout:   defaultDoclingTimeout,
+	}
+}
+
+func newResumeExtractConfig(pdfExtractor string, doclingPythonBin string, doclingTimeoutSeconds int) (ResumeExtractConfig, error) {
+	config := defaultResumeExtractConfig()
+
+	mode := strings.ToLower(strings.TrimSpace(pdfExtractor))
+	if mode != "" {
+		switch mode {
+		case resumePDFExtractorLegacy, resumePDFExtractorDocling:
+			config.PDFExtractor = mode
+		default:
+			return ResumeExtractConfig{}, fmt.Errorf("invalid resume pdf extractor: %s", mode)
+		}
+	}
+
+	pythonBin := strings.TrimSpace(doclingPythonBin)
+	if pythonBin != "" {
+		config.DoclingPythonBin = pythonBin
+	}
+
+	if doclingTimeoutSeconds > 0 {
+		config.DoclingTimeout = time.Duration(doclingTimeoutSeconds) * time.Second
+	}
+
+	return config, nil
 }
 
 const resumeProfileExtractionPrompt = `你是“简历能力画像抽取器”。
@@ -165,18 +213,31 @@ func parseResumeProfileOutput(raw string) (UserProfile, error) {
 }
 
 func extractResumeText(filename string, contentType string, fileBytes []byte) (string, error) {
+	return extractResumeTextWithConfig(context.Background(), filename, contentType, fileBytes, defaultResumeExtractConfig())
+}
+
+func extractResumeTextWithConfig(ctx context.Context, filename string, contentType string, fileBytes []byte, config ResumeExtractConfig) (string, error) {
 	if len(fileBytes) == 0 {
 		return "", errResumeFileEmpty
 	}
 	if len(fileBytes) > maxResumeFileSizeBytes {
 		return "", errResumeFileTooLarge
 	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	ext := strings.ToLower(strings.TrimSpace(filepath.Ext(filename)))
 	contentType = strings.ToLower(strings.TrimSpace(contentType))
+	if strings.TrimSpace(config.PDFExtractor) == "" {
+		config = defaultResumeExtractConfig()
+	}
 
 	switch {
 	case ext == ".pdf" || strings.Contains(contentType, "application/pdf"):
+		if config.PDFExtractor == resumePDFExtractorDocling {
+			return extractPDFTextWithDocling(ctx, fileBytes, config)
+		}
 		return extractPDFText(fileBytes)
 	case ext == ".docx" || strings.Contains(contentType, "wordprocessingml.document"):
 		return extractDOCXText(fileBytes)
@@ -187,6 +248,118 @@ func extractResumeText(filename string, contentType string, fileBytes []byte) (s
 	default:
 		return "", errResumeFormatNotFound
 	}
+}
+
+const doclingInlineScript = `
+import sys
+from docling.document_converter import DocumentConverter
+
+source = sys.argv[1]
+converter = DocumentConverter()
+result = converter.convert(source)
+document = result.document if hasattr(result, "document") else result
+markdown = document.export_to_markdown() if hasattr(document, "export_to_markdown") else ""
+sys.stdout.write(markdown or "")
+`
+
+func extractPDFTextWithDocling(ctx context.Context, fileBytes []byte, config ResumeExtractConfig) (string, error) {
+	config = normalizeResumeExtractConfig(config)
+
+	tempFile, err := os.CreateTemp("", "trace2offer_resume_*.pdf")
+	if err != nil {
+		return "", &ResumeImportError{Message: "Docling 预处理失败：无法创建临时文件"}
+	}
+	tempPath := tempFile.Name()
+	defer func() { _ = os.Remove(tempPath) }()
+
+	if _, err := tempFile.Write(fileBytes); err != nil {
+		_ = tempFile.Close()
+		return "", &ResumeImportError{Message: "Docling 预处理失败：写入临时 PDF 失败"}
+	}
+	if err := tempFile.Close(); err != nil {
+		return "", &ResumeImportError{Message: "Docling 预处理失败：关闭临时 PDF 失败"}
+	}
+
+	runCtx := ctx
+	cancel := func() {}
+	if config.DoclingTimeout > 0 {
+		runCtx, cancel = context.WithTimeout(ctx, config.DoclingTimeout)
+	}
+	defer cancel()
+
+	cmd := exec.CommandContext(runCtx, config.DoclingPythonBin, "-c", doclingInlineScript, tempPath)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		return "", buildDoclingRunError(runCtx, err, stderr.String(), config.DoclingPythonBin)
+	}
+
+	text := normalizeResumeText(stdout.String())
+	if text == "" {
+		return "", &ResumeImportError{Message: "Docling 未提取到可用文本，请尝试 docx 或 txt"}
+	}
+	return text, nil
+}
+
+func buildDoclingRunError(ctx context.Context, runErr error, stderr string, pythonBin string) error {
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return &ResumeImportError{Message: "Docling 处理超时，请稍后重试或切换 legacy 提取器"}
+	}
+	if errors.Is(runErr, exec.ErrNotFound) {
+		return &ResumeImportError{Message: fmt.Sprintf("Docling 运行失败：找不到 Python 可执行文件 %s", pythonBin)}
+	}
+	if strings.Contains(strings.ToLower(strings.TrimSpace(runErr.Error())), "no such file or directory") {
+		return &ResumeImportError{Message: fmt.Sprintf("Docling 运行失败：找不到 Python 可执行文件 %s", pythonBin)}
+	}
+
+	detail := strings.TrimSpace(stderr)
+	if detail == "" {
+		detail = strings.TrimSpace(runErr.Error())
+	}
+	lower := strings.ToLower(detail)
+	if strings.Contains(lower, "no module named") && strings.Contains(lower, "docling") {
+		return &ResumeImportError{Message: "Docling 运行失败：未安装 docling，请执行 pip install docling 或切换 legacy 提取器"}
+	}
+	return &ResumeImportError{Message: "Docling PDF 提取失败：" + truncateErrorDetail(detail, 180)}
+}
+
+func normalizeResumeExtractConfig(config ResumeExtractConfig) ResumeExtractConfig {
+	defaults := defaultResumeExtractConfig()
+	normalized := config
+
+	mode := strings.ToLower(strings.TrimSpace(config.PDFExtractor))
+	switch mode {
+	case resumePDFExtractorLegacy, resumePDFExtractorDocling:
+		normalized.PDFExtractor = mode
+	default:
+		normalized.PDFExtractor = defaults.PDFExtractor
+	}
+
+	pythonBin := strings.TrimSpace(config.DoclingPythonBin)
+	if pythonBin == "" {
+		pythonBin = defaults.DoclingPythonBin
+	}
+	normalized.DoclingPythonBin = pythonBin
+
+	if normalized.DoclingTimeout <= 0 {
+		normalized.DoclingTimeout = defaults.DoclingTimeout
+	}
+	return normalized
+}
+
+func truncateErrorDetail(detail string, maxRunes int) string {
+	trimmed := strings.TrimSpace(detail)
+	if maxRunes <= 0 {
+		return ""
+	}
+	runes := []rune(trimmed)
+	if len(runes) <= maxRunes {
+		return trimmed
+	}
+	return string(runes[:maxRunes]) + "..."
 }
 
 func extractPlainText(fileBytes []byte) (string, error) {

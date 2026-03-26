@@ -108,3 +108,31 @@ func TestManagedRuntimeUpdateSettingsValidation(t *testing.T) {
 		t.Fatalf("expected settings validation error, got %T %v", err, err)
 	}
 }
+
+func TestManagedRuntimeInvalidResumeExtractor(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	_, err := NewManagedRuntime(ManagedRuntimeConfig{
+		SettingsPath:          filepath.Join(tmpDir, "agent_runtime_config.json"),
+		SessionDataPath:       filepath.Join(tmpDir, "sessions"),
+		MemoryDataPath:        filepath.Join(tmpDir, "agent_memory.json"),
+		UserProfileDataPath:   filepath.Join(tmpDir, "user_profile.json"),
+		ResumeDataDir:         filepath.Join(tmpDir, "resume"),
+		ResumePDFExtractor:    "invalid_mode",
+		DoclingPythonBin:      "python3",
+		DoclingTimeoutSeconds: 120,
+		LeadManager:           &stubLeadManager{},
+		Defaults: RuntimeSettings{
+			Model:                "gpt-5-mini",
+			MaxSteps:             6,
+			SystemPrompt:         "default prompt",
+			OpenAIBaseURL:        "https://api.openai.com/v1/responses",
+			OpenAITimeoutSeconds: 60,
+			OpenAIAPIKey:         "test_api_key",
+		},
+	})
+	if err == nil {
+		t.Fatal("expected invalid resume extractor error")
+	}
+}

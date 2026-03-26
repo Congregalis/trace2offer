@@ -1,6 +1,11 @@
 package agent
 
-import "testing"
+import (
+	"context"
+	"strings"
+	"testing"
+	"time"
+)
 
 func TestParseResumeProfileOutput(t *testing.T) {
 	t.Parallel()
@@ -33,5 +38,52 @@ func TestExtractResumeTextPlainText(t *testing.T) {
 	}
 	if text == "" {
 		t.Fatal("expected extracted text")
+	}
+}
+
+func TestNewResumeExtractConfig(t *testing.T) {
+	t.Parallel()
+
+	config, err := newResumeExtractConfig("docling", "", 30)
+	if err != nil {
+		t.Fatalf("new resume extract config error: %v", err)
+	}
+	if config.PDFExtractor != resumePDFExtractorDocling {
+		t.Fatalf("expected docling extractor, got %q", config.PDFExtractor)
+	}
+	if config.DoclingPythonBin != defaultDoclingPythonBin {
+		t.Fatalf("expected default python bin, got %q", config.DoclingPythonBin)
+	}
+	if config.DoclingTimeout != 30*time.Second {
+		t.Fatalf("expected timeout 30s, got %s", config.DoclingTimeout)
+	}
+
+	if _, err := newResumeExtractConfig("unknown", "", 30); err == nil {
+		t.Fatal("expected invalid extractor error")
+	}
+}
+
+func TestExtractResumeTextWithDoclingMissingPython(t *testing.T) {
+	t.Parallel()
+
+	_, err := extractResumeTextWithConfig(
+		context.Background(),
+		"resume.pdf",
+		"application/pdf",
+		[]byte("%PDF-1.4 dummy"),
+		ResumeExtractConfig{
+			PDFExtractor:     resumePDFExtractorDocling,
+			DoclingPythonBin: "/path/not-exists-python",
+			DoclingTimeout:   5 * time.Second,
+		},
+	)
+	if err == nil {
+		t.Fatal("expected docling extraction error")
+	}
+	if !IsResumeImportError(err) {
+		t.Fatalf("expected resume import error, got %T %v", err, err)
+	}
+	if !strings.Contains(err.Error(), "Python") {
+		t.Fatalf("expected python-not-found hint, got %q", err.Error())
 	}
 }

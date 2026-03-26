@@ -82,16 +82,23 @@ func main() {
 	if err != nil {
 		log.Fatalf("invalid T2O_OPENAI_TIMEOUT_SECONDS: %v", err)
 	}
+	doclingTimeoutSeconds, err := getenvInt("T2O_DOCLING_TIMEOUT_SECONDS", 120)
+	if err != nil {
+		log.Fatalf("invalid T2O_DOCLING_TIMEOUT_SECONDS: %v", err)
+	}
 
 	runtime, err := agent.NewManagedRuntime(agent.ManagedRuntimeConfig{
-		SettingsPath:        getenv("T2O_AGENT_SETTINGS_DATA", filepath.Join(dataDir, "agent_runtime_config.json")),
-		SessionDataPath:     getenv("T2O_AGENT_SESSION_DATA", filepath.Join(dataDir, "sessions")),
-		MemoryDataPath:      getenv("T2O_AGENT_MEMORY_DATA", filepath.Join(dataDir, "agent_memory.json")),
-		UserProfileDataPath: getenv("T2O_AGENT_USER_PROFILE_DATA", filepath.Join(dataDir, "user_profile.json")),
-		ResumeDataDir:       getenv("T2O_AGENT_RESUME_DATA_DIR", filepath.Join(dataDir, "resume")),
-		LeadManager:         leadManager,
-		CandidateManager:    candidateManager,
-		StatsProvider:       statsService,
+		SettingsPath:          getenv("T2O_AGENT_SETTINGS_DATA", filepath.Join(dataDir, "agent_runtime_config.json")),
+		SessionDataPath:       getenv("T2O_AGENT_SESSION_DATA", filepath.Join(dataDir, "sessions")),
+		MemoryDataPath:        getenv("T2O_AGENT_MEMORY_DATA", filepath.Join(dataDir, "agent_memory.json")),
+		UserProfileDataPath:   getenv("T2O_AGENT_USER_PROFILE_DATA", filepath.Join(dataDir, "user_profile.json")),
+		ResumeDataDir:         getenv("T2O_AGENT_RESUME_DATA_DIR", filepath.Join(dataDir, "resume")),
+		ResumePDFExtractor:    getenv("T2O_RESUME_PDF_EXTRACTOR", "legacy"),
+		DoclingPythonBin:      getenv("T2O_DOCLING_PYTHON_BIN", "python3"),
+		DoclingTimeoutSeconds: doclingTimeoutSeconds,
+		LeadManager:           leadManager,
+		CandidateManager:      candidateManager,
+		StatsProvider:         statsService,
 		Defaults: agent.RuntimeSettings{
 			Model:                model,
 			MaxSteps:             maxSteps,

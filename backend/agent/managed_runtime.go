@@ -18,25 +18,29 @@ var ErrRuntimeUnavailable = errors.New("agent runtime is unavailable")
 
 // ManagedRuntimeConfig wires static dependencies and settings persistence.
 type ManagedRuntimeConfig struct {
-	SettingsPath        string
-	SessionDataPath     string
-	MemoryDataPath      string
-	UserProfileDataPath string
-	ResumeDataDir       string
-	LeadManager         lead.Manager
-	CandidateManager    candidate.Manager
-	StatsProvider       tool.StatsSummaryProvider
-	Defaults            RuntimeSettings
+	SettingsPath          string
+	SessionDataPath       string
+	MemoryDataPath        string
+	UserProfileDataPath   string
+	ResumeDataDir         string
+	ResumePDFExtractor    string
+	DoclingPythonBin      string
+	DoclingTimeoutSeconds int
+	LeadManager           lead.Manager
+	CandidateManager      candidate.Manager
+	StatsProvider         tool.StatsSummaryProvider
+	Defaults              RuntimeSettings
 }
 
 // ManagedRuntime wraps runtime with hot-reloadable settings.
 type ManagedRuntime struct {
-	mu           sync.RWMutex
-	store        *runtimeSettingsStore
-	settings     RuntimeSettings
-	runtime      *Runtime
-	userProfiles *UserProfileManager
-	resumeSource *FileResumeSourceStore
+	mu                  sync.RWMutex
+	store               *runtimeSettingsStore
+	settings            RuntimeSettings
+	runtime             *Runtime
+	userProfiles        *UserProfileManager
+	resumeSource        *FileResumeSourceStore
+	resumeExtractConfig ResumeExtractConfig
 
 	sessionDataPath  string
 	memoryDataPath   string
@@ -74,6 +78,14 @@ func NewManagedRuntime(config ManagedRuntimeConfig) (*ManagedRuntime, error) {
 	if err != nil {
 		return nil, err
 	}
+	resumeExtractConfig, err := newResumeExtractConfig(
+		config.ResumePDFExtractor,
+		config.DoclingPythonBin,
+		config.DoclingTimeoutSeconds,
+	)
+	if err != nil {
+		return nil, err
+	}
 
 	defaults := mergeRuntimeSettings(defaultRuntimeSettings(), config.Defaults)
 	store, err := newRuntimeSettingsStore(config.SettingsPath)
@@ -89,15 +101,16 @@ func NewManagedRuntime(config ManagedRuntimeConfig) (*ManagedRuntime, error) {
 	}
 
 	manager := &ManagedRuntime{
-		store:            store,
-		settings:         settings,
-		sessionDataPath:  config.SessionDataPath,
-		memoryDataPath:   config.MemoryDataPath,
-		leadManager:      config.LeadManager,
-		candidateManager: config.CandidateManager,
-		statsProvider:    config.StatsProvider,
-		userProfiles:     profileManager,
-		resumeSource:     resumeSourceStore,
+		store:               store,
+		settings:            settings,
+		sessionDataPath:     config.SessionDataPath,
+		memoryDataPath:      config.MemoryDataPath,
+		leadManager:         config.LeadManager,
+		candidateManager:    config.CandidateManager,
+		statsProvider:       config.StatsProvider,
+		userProfiles:        profileManager,
+		resumeSource:        resumeSourceStore,
+		resumeExtractConfig: resumeExtractConfig,
 	}
 
 	runtime, err := manager.buildRuntime(settings)
@@ -235,7 +248,7 @@ func (m *ManagedRuntime) ImportUserProfileFromResume(ctx context.Context, source
 		return UserProfileImportResult{}, ErrResumeSourceUnavailable
 	}
 
-	resumeText, err := extractResumeText(sourceName, contentType, content)
+	resumeText, err := extractResumeTextWithConfig(ctx, sourceName, contentType, content, m.resumeExtractConfig)
 	if err != nil {
 		return UserProfileImportResult{}, err
 	}
