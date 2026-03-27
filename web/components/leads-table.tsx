@@ -54,6 +54,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { PrepEntryButton } from "@/components/prep/prep-entry-button";
 
 const EMPTY_NEW_LEAD: LeadMutationInput = {
   company: "",
@@ -488,6 +489,7 @@ export function LeadsTable() {
                     >
                       JD内容
                     </Button>
+                    <PrepEntryButton leadID={lead.id} disabled={isSyncing} />
                   </div>
                 </TableCell>
                 <TableCell className="text-muted-foreground">{formatDate(lead.updatedAt)}</TableCell>

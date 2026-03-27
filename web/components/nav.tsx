@@ -87,15 +87,12 @@ export function Nav() {
     router.push(href);
   };
 
-  const activeNavIndex = Math.max(
-    navItems.findIndex((item) => {
-      if (item.href === "/") {
-        return activePath === "/";
-      }
-      return activePath.startsWith(item.href);
-    }),
-    0
-  );
+  const activeNavIndex = navItems.findIndex((item) => {
+    if (item.href === "/") {
+      return activePath === "/";
+    }
+    return activePath.startsWith(item.href);
+  });
 
   return (
     <header ref={headerRef} className="sticky top-0 z-50 px-4 pt-4 sm:px-6">
@@ -127,11 +124,13 @@ export function Nav() {
             </div>
 
             <nav className="relative isolate grid grid-cols-2 gap-1 rounded-full border border-border/70 bg-background/70 p-1 sm:inline-grid">
-              <span
-                aria-hidden
-                className="pointer-events-none absolute inset-y-1 left-1 w-[calc((100%-0.5rem)/2)] rounded-full bg-foreground shadow-[var(--panel-shadow-strong)] transition-transform duration-300 ease-[var(--ease-fluid)]"
-                style={{ transform: `translateX(${activeNavIndex * 100}%)` }}
-              />
+              {activeNavIndex >= 0 ? (
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute inset-y-1 left-1 w-[calc((100%-0.5rem)/2)] rounded-full bg-foreground shadow-[var(--panel-shadow-strong)] transition-transform duration-300 ease-[var(--ease-fluid)]"
+                  style={{ transform: `translateX(${activeNavIndex * 100}%)` }}
+                />
+              ) : null}
               {navItems.map((item) => {
                 const isActive =
                   item.href === "/" ? activePath === "/" : activePath.startsWith(item.href);
