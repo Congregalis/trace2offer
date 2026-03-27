@@ -104,6 +104,106 @@ func TestLeadAndChatAPI(t *testing.T) {
 		t.Fatalf("expected 3 supported scopes, got %d", len(prepMetaPayload.Data.SupportedScopes))
 	}
 
+	resp = doJSONRequest(t, router, http.MethodGet, "/api/prep/topics", nil)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("GET /api/prep/topics status=%d body=%s", resp.Code, resp.Body.String())
+	}
+	var topicListPayload struct {
+		Data []prep.Topic `json:"data"`
+	}
+	decodeJSONBody(t, resp, &topicListPayload)
+	if len(topicListPayload.Data) != 0 {
+		t.Fatalf("expected empty prep topics initially, got %d", len(topicListPayload.Data))
+	}
+
+	resp = doJSONRequest(t, router, http.MethodPost, "/api/prep/topics", map[string]any{
+		"key":         "rag",
+		"name":        "RAG",
+		"description": "检索增强生成",
+	})
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("POST /api/prep/topics status=%d body=%s", resp.Code, resp.Body.String())
+	}
+
+	var topicPayload struct {
+		Data prep.Topic `json:"data"`
+	}
+	decodeJSONBody(t, resp, &topicPayload)
+	if topicPayload.Data.Key != "rag" {
+		t.Fatalf("expected topic key rag, got %q", topicPayload.Data.Key)
+	}
+
+	resp = doJSONRequest(t, router, http.MethodPatch, "/api/prep/topics/rag", map[string]any{
+		"description": "RAG + retrieval strategy",
+	})
+	if resp.Code != http.StatusOK {
+		t.Fatalf("PATCH /api/prep/topics/:key status=%d body=%s", resp.Code, resp.Body.String())
+	}
+	decodeJSONBody(t, resp, &topicPayload)
+	if topicPayload.Data.Description != "RAG + retrieval strategy" {
+		t.Fatalf("expected updated topic description, got %q", topicPayload.Data.Description)
+	}
+
+	resp = doJSONRequest(t, router, http.MethodGet, "/api/prep/knowledge/topics/rag/documents", nil)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("GET /api/prep/knowledge/:scope/:scope_id/documents status=%d body=%s", resp.Code, resp.Body.String())
+	}
+	var documentListPayload struct {
+		Data []prep.KnowledgeDocument `json:"data"`
+	}
+	decodeJSONBody(t, resp, &documentListPayload)
+	if len(documentListPayload.Data) != 0 {
+		t.Fatalf("expected empty prep documents initially, got %d", len(documentListPayload.Data))
+	}
+
+	resp = doJSONRequest(t, router, http.MethodPost, "/api/prep/knowledge/topics/rag/documents", map[string]any{
+		"filename": "overview",
+		"content":  "# RAG\n\nv1",
+	})
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("POST /api/prep/knowledge/:scope/:scope_id/documents status=%d body=%s", resp.Code, resp.Body.String())
+	}
+	var documentPayload struct {
+		Data prep.KnowledgeDocument `json:"data"`
+	}
+	decodeJSONBody(t, resp, &documentPayload)
+	if documentPayload.Data.Filename != "overview.md" {
+		t.Fatalf("expected created filename overview.md, got %q", documentPayload.Data.Filename)
+	}
+
+	resp = doJSONRequest(t, router, http.MethodPut, "/api/prep/knowledge/topics/rag/documents/overview.md", map[string]any{
+		"content": "# RAG\n\nupdated",
+	})
+	if resp.Code != http.StatusOK {
+		t.Fatalf("PUT /api/prep/knowledge/:scope/:scope_id/documents/:filename status=%d body=%s", resp.Code, resp.Body.String())
+	}
+	decodeJSONBody(t, resp, &documentPayload)
+	if documentPayload.Data.Content != "# RAG\n\nupdated" {
+		t.Fatalf("expected updated document content, got %q", documentPayload.Data.Content)
+	}
+
+	resp = doJSONRequest(t, router, http.MethodGet, "/api/prep/knowledge/topics/rag/documents", nil)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("GET /api/prep/knowledge/:scope/:scope_id/documents status=%d body=%s", resp.Code, resp.Body.String())
+	}
+	decodeJSONBody(t, resp, &documentListPayload)
+	if len(documentListPayload.Data) != 1 {
+		t.Fatalf("expected one prep document, got %d", len(documentListPayload.Data))
+	}
+	if documentListPayload.Data[0].Content != "# RAG\n\nupdated" {
+		t.Fatalf("expected listed document content updated, got %q", documentListPayload.Data[0].Content)
+	}
+
+	resp = doJSONRequest(t, router, http.MethodDelete, "/api/prep/knowledge/topics/rag/documents/overview.md", nil)
+	if resp.Code != http.StatusNoContent {
+		t.Fatalf("DELETE /api/prep/knowledge/:scope/:scope_id/documents/:filename status=%d body=%s", resp.Code, resp.Body.String())
+	}
+
+	resp = doJSONRequest(t, router, http.MethodDelete, "/api/prep/topics/rag", nil)
+	if resp.Code != http.StatusNoContent {
+		t.Fatalf("DELETE /api/prep/topics/:key status=%d body=%s", resp.Code, resp.Body.String())
+	}
+
 	resp = doJSONRequest(t, router, http.MethodGet, "/api/leads", nil)
 	if resp.Code != http.StatusOK {
 		t.Fatalf("GET /api/leads status=%d body=%s", resp.Code, resp.Body.String())

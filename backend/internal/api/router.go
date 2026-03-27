@@ -131,6 +131,14 @@ func NewRouter(leads storage.LeadStore, candidates storage.CandidateStore, leadT
 
 		prep := api.Group("/prep")
 		prep.GET("/meta", h.getPrepMeta)
+		prep.GET("/topics", h.listPrepTopics)
+		prep.POST("/topics", h.createPrepTopic)
+		prep.PATCH("/topics/:key", h.updatePrepTopic)
+		prep.DELETE("/topics/:key", h.deletePrepTopic)
+		prep.GET("/knowledge/:scope/:scope_id/documents", h.listPrepKnowledgeDocuments)
+		prep.POST("/knowledge/:scope/:scope_id/documents", h.createPrepKnowledgeDocument)
+		prep.PUT("/knowledge/:scope/:scope_id/documents/:filename", h.updatePrepKnowledgeDocument)
+		prep.DELETE("/knowledge/:scope/:scope_id/documents/:filename", h.deletePrepKnowledgeDocument)
 
 		api.GET("/calendar/interviews.ics", h.exportInterviewICS)
 		api.GET("/caldav/trace2offer", h.exportInterviewICS)
@@ -670,6 +678,154 @@ func (h *handler) getPrepMeta(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": h.prep.GetMeta()})
 }
 
+func (h *handler) listPrepTopics(c *gin.Context) {
+	if h.prep == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"message": "prep service is not configured"})
+		return
+	}
+
+	topics, err := h.prep.ListTopics()
+	if err != nil {
+		respondPrepError(c, "list prep topics failed", err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": topics})
+}
+
+func (h *handler) createPrepTopic(c *gin.Context) {
+	if h.prep == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"message": "prep service is not configured"})
+		return
+	}
+
+	input, ok := bindPrepTopicCreateInput(c)
+	if !ok {
+		return
+	}
+
+	created, err := h.prep.CreateTopic(input)
+	if err != nil {
+		respondPrepError(c, "create prep topic failed", err)
+		return
+	}
+	c.JSON(http.StatusCreated, gin.H{"data": created})
+}
+
+func (h *handler) updatePrepTopic(c *gin.Context) {
+	if h.prep == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"message": "prep service is not configured"})
+		return
+	}
+
+	input, ok := bindPrepTopicPatchInput(c)
+	if !ok {
+		return
+	}
+
+	updated, found, err := h.prep.UpdateTopic(c.Param("key"), input)
+	if err != nil {
+		respondPrepError(c, "update prep topic failed", err)
+		return
+	}
+	if !found {
+		c.JSON(http.StatusNotFound, gin.H{"message": "prep topic not found"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": updated})
+}
+
+func (h *handler) deletePrepTopic(c *gin.Context) {
+	if h.prep == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"message": "prep service is not configured"})
+		return
+	}
+
+	deleted, err := h.prep.DeleteTopic(c.Param("key"))
+	if err != nil {
+		respondPrepError(c, "delete prep topic failed", err)
+		return
+	}
+	if !deleted {
+		c.JSON(http.StatusNotFound, gin.H{"message": "prep topic not found"})
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
+func (h *handler) listPrepKnowledgeDocuments(c *gin.Context) {
+	if h.prep == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"message": "prep service is not configured"})
+		return
+	}
+
+	documents, err := h.prep.ListKnowledgeDocuments(c.Param("scope"), c.Param("scope_id"))
+	if err != nil {
+		respondPrepError(c, "list prep knowledge documents failed", err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": documents})
+}
+
+func (h *handler) createPrepKnowledgeDocument(c *gin.Context) {
+	if h.prep == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"message": "prep service is not configured"})
+		return
+	}
+
+	input, ok := bindPrepKnowledgeCreateInput(c)
+	if !ok {
+		return
+	}
+
+	created, err := h.prep.CreateKnowledgeDocument(c.Param("scope"), c.Param("scope_id"), input)
+	if err != nil {
+		respondPrepError(c, "create prep knowledge document failed", err)
+		return
+	}
+	c.JSON(http.StatusCreated, gin.H{"data": created})
+}
+
+func (h *handler) updatePrepKnowledgeDocument(c *gin.Context) {
+	if h.prep == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"message": "prep service is not configured"})
+		return
+	}
+
+	input, ok := bindPrepKnowledgeUpdateInput(c)
+	if !ok {
+		return
+	}
+
+	updated, found, err := h.prep.UpdateKnowledgeDocument(c.Param("scope"), c.Param("scope_id"), c.Param("filename"), input)
+	if err != nil {
+		respondPrepError(c, "update prep knowledge document failed", err)
+		return
+	}
+	if !found {
+		c.JSON(http.StatusNotFound, gin.H{"message": "prep knowledge document not found"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": updated})
+}
+
+func (h *handler) deletePrepKnowledgeDocument(c *gin.Context) {
+	if h.prep == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"message": "prep service is not configured"})
+		return
+	}
+
+	deleted, err := h.prep.DeleteKnowledgeDocument(c.Param("scope"), c.Param("scope_id"), c.Param("filename"))
+	if err != nil {
+		respondPrepError(c, "delete prep knowledge document failed", err)
+		return
+	}
+	if !deleted {
+		c.JSON(http.StatusNotFound, gin.H{"message": "prep knowledge document not found"})
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
 func (h *handler) exportInterviewICS(c *gin.Context) {
 	if h.calendar == nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "calendar service is not configured"})
@@ -794,6 +950,42 @@ func bindDiscoveryRuleInput(c *gin.Context) (model.DiscoveryRuleMutationInput, b
 	return input, true
 }
 
+func bindPrepTopicCreateInput(c *gin.Context) (prep.TopicCreateInput, bool) {
+	var input prep.TopicCreateInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid prep topic payload", "error": err.Error()})
+		return prep.TopicCreateInput{}, false
+	}
+	return input, true
+}
+
+func bindPrepTopicPatchInput(c *gin.Context) (prep.TopicPatchInput, bool) {
+	var input prep.TopicPatchInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid prep topic patch payload", "error": err.Error()})
+		return prep.TopicPatchInput{}, false
+	}
+	return input, true
+}
+
+func bindPrepKnowledgeCreateInput(c *gin.Context) (prep.KnowledgeDocumentCreateInput, bool) {
+	var input prep.KnowledgeDocumentCreateInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid prep knowledge payload", "error": err.Error()})
+		return prep.KnowledgeDocumentCreateInput{}, false
+	}
+	return input, true
+}
+
+func bindPrepKnowledgeUpdateInput(c *gin.Context) (prep.KnowledgeDocumentUpdateInput, bool) {
+	var input prep.KnowledgeDocumentUpdateInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid prep knowledge patch payload", "error": err.Error()})
+		return prep.KnowledgeDocumentUpdateInput{}, false
+	}
+	return input, true
+}
+
 func respondLeadError(c *gin.Context, message string, err error) {
 	if lead.IsValidationError(err) {
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
@@ -827,6 +1019,22 @@ func respondDiscoveryError(c *gin.Context, message string, err error) {
 	}
 	if errors.Is(err, discovery.ErrRuleStoreUnavailable) || errors.Is(err, discovery.ErrCandidateManagerUnavailable) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"message": err.Error()})
+		return
+	}
+	c.JSON(http.StatusInternalServerError, gin.H{"message": message, "error": err.Error()})
+}
+
+func respondPrepError(c *gin.Context, message string, err error) {
+	if prep.IsValidationError(err) {
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		return
+	}
+	if errors.Is(err, prep.ErrPrepDisabled) || errors.Is(err, prep.ErrTopicStoreUnavailable) || errors.Is(err, prep.ErrKnowledgeStoreUnavailable) {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"message": err.Error()})
+		return
+	}
+	if errors.Is(err, prep.ErrTopicAlreadyExists) || errors.Is(err, prep.ErrDocumentAlreadyExists) {
+		c.JSON(http.StatusConflict, gin.H{"message": err.Error()})
 		return
 	}
 	c.JSON(http.StatusInternalServerError, gin.H{"message": message, "error": err.Error()})

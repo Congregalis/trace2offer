@@ -10,7 +10,9 @@ import (
 )
 
 type Service struct {
-	config Config
+	config         Config
+	topicStore     *TopicStore
+	knowledgeStore *KnowledgeStore
 }
 
 func NewService(config Config) (*Service, error) {
@@ -33,6 +35,17 @@ func NewService(config Config) (*Service, error) {
 	if err := service.initializeStorage(); err != nil {
 		return nil, err
 	}
+
+	topicStore, err := NewTopicStore(filepath.Join(normalized.DataDir, "topic_catalog.json"))
+	if err != nil {
+		return nil, err
+	}
+	knowledgeStore, err := NewKnowledgeStore(filepath.Join(normalized.DataDir, "knowledge"))
+	if err != nil {
+		return nil, err
+	}
+	service.topicStore = topicStore
+	service.knowledgeStore = knowledgeStore
 	return service, nil
 }
 
@@ -63,6 +76,11 @@ func (s *Service) initializeStorage() error {
 	if err := os.MkdirAll(filepath.Join(rootDir, "knowledge"), 0o755); err != nil {
 		return fmt.Errorf("create prep knowledge dir: %w", err)
 	}
+	for _, scope := range DefaultSupportedScopes() {
+		if err := os.MkdirAll(filepath.Join(rootDir, "knowledge", string(scope)), 0o755); err != nil {
+			return fmt.Errorf("create prep knowledge %s dir: %w", scope, err)
+		}
+	}
 	if err := os.MkdirAll(filepath.Join(rootDir, "sessions"), 0o755); err != nil {
 		return fmt.Errorf("create prep sessions dir: %w", err)
 	}
@@ -70,6 +88,96 @@ func (s *Service) initializeStorage() error {
 	topicCatalogPath := filepath.Join(rootDir, "topic_catalog.json")
 	if err := ensureTopicCatalogFile(topicCatalogPath); err != nil {
 		return err
+	}
+	return nil
+}
+
+func (s *Service) ListTopics() ([]Topic, error) {
+	if err := s.ensureEnabled(); err != nil {
+		return nil, err
+	}
+	if s.topicStore == nil {
+		return nil, ErrTopicStoreUnavailable
+	}
+	return s.topicStore.List(), nil
+}
+
+func (s *Service) CreateTopic(input TopicCreateInput) (Topic, error) {
+	if err := s.ensureEnabled(); err != nil {
+		return Topic{}, err
+	}
+	if s.topicStore == nil {
+		return Topic{}, ErrTopicStoreUnavailable
+	}
+	return s.topicStore.Create(input)
+}
+
+func (s *Service) UpdateTopic(key string, patch TopicPatchInput) (Topic, bool, error) {
+	if err := s.ensureEnabled(); err != nil {
+		return Topic{}, false, err
+	}
+	if s.topicStore == nil {
+		return Topic{}, false, ErrTopicStoreUnavailable
+	}
+	return s.topicStore.Update(key, patch)
+}
+
+func (s *Service) DeleteTopic(key string) (bool, error) {
+	if err := s.ensureEnabled(); err != nil {
+		return false, err
+	}
+	if s.topicStore == nil {
+		return false, ErrTopicStoreUnavailable
+	}
+	return s.topicStore.Delete(key)
+}
+
+func (s *Service) ListKnowledgeDocuments(scope string, scopeID string) ([]KnowledgeDocument, error) {
+	if err := s.ensureEnabled(); err != nil {
+		return nil, err
+	}
+	if s.knowledgeStore == nil {
+		return nil, ErrKnowledgeStoreUnavailable
+	}
+	return s.knowledgeStore.List(scope, scopeID)
+}
+
+func (s *Service) CreateKnowledgeDocument(scope string, scopeID string, input KnowledgeDocumentCreateInput) (KnowledgeDocument, error) {
+	if err := s.ensureEnabled(); err != nil {
+		return KnowledgeDocument{}, err
+	}
+	if s.knowledgeStore == nil {
+		return KnowledgeDocument{}, ErrKnowledgeStoreUnavailable
+	}
+	return s.knowledgeStore.Create(scope, scopeID, input)
+}
+
+func (s *Service) UpdateKnowledgeDocument(scope string, scopeID string, filename string, input KnowledgeDocumentUpdateInput) (KnowledgeDocument, bool, error) {
+	if err := s.ensureEnabled(); err != nil {
+		return KnowledgeDocument{}, false, err
+	}
+	if s.knowledgeStore == nil {
+		return KnowledgeDocument{}, false, ErrKnowledgeStoreUnavailable
+	}
+	return s.knowledgeStore.Update(scope, scopeID, filename, input)
+}
+
+func (s *Service) DeleteKnowledgeDocument(scope string, scopeID string, filename string) (bool, error) {
+	if err := s.ensureEnabled(); err != nil {
+		return false, err
+	}
+	if s.knowledgeStore == nil {
+		return false, ErrKnowledgeStoreUnavailable
+	}
+	return s.knowledgeStore.Delete(scope, scopeID, filename)
+}
+
+func (s *Service) ensureEnabled() error {
+	if s == nil {
+		return ErrPrepDisabled
+	}
+	if !s.config.Enabled {
+		return ErrPrepDisabled
 	}
 	return nil
 }
