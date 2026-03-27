@@ -50,6 +50,22 @@ type KnowledgeDocumentUpdateInput struct {
 	Content string `json:"content"`
 }
 
+type ContextSource struct {
+	Scope string `json:"scope"`
+	Kind  string `json:"kind"`
+	Title string `json:"title"`
+}
+
+type LeadContextPreview struct {
+	LeadID     string          `json:"lead_id"`
+	Company    string          `json:"company"`
+	Position   string          `json:"position"`
+	HasResume  bool            `json:"has_resume"`
+	HasProfile bool            `json:"has_profile"`
+	TopicKeys  []string        `json:"topic_keys"`
+	Sources    []ContextSource `json:"sources"`
+}
+
 func DefaultSupportedScopes() []Scope {
 	return []Scope{
 		ScopeTopics,

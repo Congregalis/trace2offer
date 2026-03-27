@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/textproto"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -194,16 +195,6 @@ func TestLeadAndChatAPI(t *testing.T) {
 		t.Fatalf("expected listed document content updated, got %q", documentListPayload.Data[0].Content)
 	}
 
-	resp = doJSONRequest(t, router, http.MethodDelete, "/api/prep/knowledge/topics/rag/documents/overview.md", nil)
-	if resp.Code != http.StatusNoContent {
-		t.Fatalf("DELETE /api/prep/knowledge/:scope/:scope_id/documents/:filename status=%d body=%s", resp.Code, resp.Body.String())
-	}
-
-	resp = doJSONRequest(t, router, http.MethodDelete, "/api/prep/topics/rag", nil)
-	if resp.Code != http.StatusNoContent {
-		t.Fatalf("DELETE /api/prep/topics/:key status=%d body=%s", resp.Code, resp.Body.String())
-	}
-
 	resp = doJSONRequest(t, router, http.MethodGet, "/api/leads", nil)
 	if resp.Code != http.StatusOK {
 		t.Fatalf("GET /api/leads status=%d body=%s", resp.Code, resp.Body.String())
@@ -257,6 +248,72 @@ func TestLeadAndChatAPI(t *testing.T) {
 	}
 
 	leadID := createPayload.Data.ID
+
+	if err := os.MkdirAll(filepath.Join(tmpDir, "resume"), 0o755); err != nil {
+		t.Fatalf("mkdir resume dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "resume", "current.md"), []byte("# Resume\n\nGo backend engineer"), 0o644); err != nil {
+		t.Fatalf("write resume current.md: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "user_profile.json"), []byte(`{"name":"Alice","core_skills":["Go"]}`), 0o644); err != nil {
+		t.Fatalf("write user_profile.json: %v", err)
+	}
+
+	resp = doJSONRequest(t, router, http.MethodPost, "/api/prep/knowledge/companies/openai/documents", map[string]any{
+		"filename": "culture",
+		"content":  "# OpenAI Culture\n\nhigh bar",
+	})
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("POST /api/prep/knowledge/companies/:scope_id/documents status=%d body=%s", resp.Code, resp.Body.String())
+	}
+
+	resp = doJSONRequest(t, router, http.MethodPost, "/api/prep/knowledge/leads/"+leadID+"/documents", map[string]any{
+		"filename": "notes",
+		"content":  "focus on system design",
+	})
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("POST /api/prep/knowledge/leads/:scope_id/documents status=%d body=%s", resp.Code, resp.Body.String())
+	}
+
+	resp = doJSONRequest(t, router, http.MethodGet, "/api/prep/leads/"+leadID+"/context-preview", nil)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("GET /api/prep/leads/:lead_id/context-preview status=%d body=%s", resp.Code, resp.Body.String())
+	}
+	var contextPreviewPayload struct {
+		Data prep.LeadContextPreview `json:"data"`
+	}
+	decodeJSONBody(t, resp, &contextPreviewPayload)
+	if contextPreviewPayload.Data.LeadID != leadID {
+		t.Fatalf("expected context lead_id=%q, got %q", leadID, contextPreviewPayload.Data.LeadID)
+	}
+	if !contextPreviewPayload.Data.HasResume {
+		t.Fatal("expected context has_resume=true")
+	}
+	if !contextPreviewPayload.Data.HasProfile {
+		t.Fatal("expected context has_profile=true")
+	}
+	if len(contextPreviewPayload.Data.TopicKeys) == 0 {
+		t.Fatal("expected context topic_keys not empty")
+	}
+	if !hasPrepContextSource(contextPreviewPayload.Data.Sources, "lead", "jd_text", "JD 原文") {
+		t.Fatalf("expected jd source in context preview, got %+v", contextPreviewPayload.Data.Sources)
+	}
+	if !hasPrepContextSource(contextPreviewPayload.Data.Sources, "company", "markdown", "openai/culture.md") {
+		t.Fatalf("expected company markdown source in context preview, got %+v", contextPreviewPayload.Data.Sources)
+	}
+	if !hasPrepContextSource(contextPreviewPayload.Data.Sources, "lead", "markdown", leadID+"/notes.md") {
+		t.Fatalf("expected lead markdown source in context preview, got %+v", contextPreviewPayload.Data.Sources)
+	}
+
+	resp = doJSONRequest(t, router, http.MethodDelete, "/api/prep/knowledge/topics/rag/documents/overview.md", nil)
+	if resp.Code != http.StatusNoContent {
+		t.Fatalf("DELETE /api/prep/knowledge/:scope/:scope_id/documents/:filename status=%d body=%s", resp.Code, resp.Body.String())
+	}
+
+	resp = doJSONRequest(t, router, http.MethodDelete, "/api/prep/topics/rag", nil)
+	if resp.Code != http.StatusNoContent {
+		t.Fatalf("DELETE /api/prep/topics/:key status=%d body=%s", resp.Code, resp.Body.String())
+	}
 
 	putInput := model.LeadMutationInput{
 		Company:           "OpenAI",
@@ -981,4 +1038,13 @@ func decodeJSONBody(t *testing.T, resp *httptest.ResponseRecorder, out any) {
 	if err := json.Unmarshal(resp.Body.Bytes(), out); err != nil {
 		t.Fatalf("decode json body: %v; body=%s", err, resp.Body.String())
 	}
+}
+
+func hasPrepContextSource(sources []prep.ContextSource, scope string, kind string, title string) bool {
+	for _, source := range sources {
+		if source.Scope == scope && source.Kind == kind && source.Title == title {
+			return true
+		}
+	}
+	return false
 }

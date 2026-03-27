@@ -42,6 +42,22 @@ export interface PrepKnowledgeDocumentUpdateInput {
   content: string;
 }
 
+export interface PrepContextSource {
+  scope: string;
+  kind: string;
+  title: string;
+}
+
+export interface PrepLeadContextPreview {
+  leadId: string;
+  company: string;
+  position: string;
+  hasResume: boolean;
+  hasProfile: boolean;
+  topicKeys: string[];
+  sources: PrepContextSource[];
+}
+
 export const DEFAULT_PREP_SCOPES: PrepScope[] = ["topics", "companies", "leads"];
 
 export const DEFAULT_PREP_META: PrepMeta = {

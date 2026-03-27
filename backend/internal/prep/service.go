@@ -7,12 +7,15 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"trace2offer/backend/internal/model"
 )
 
 type Service struct {
-	config         Config
-	topicStore     *TopicStore
-	knowledgeStore *KnowledgeStore
+	config          Config
+	topicStore      *TopicStore
+	knowledgeStore  *KnowledgeStore
+	contextResolver *ContextResolver
 }
 
 func NewService(config Config) (*Service, error) {
@@ -46,6 +49,7 @@ func NewService(config Config) (*Service, error) {
 	}
 	service.topicStore = topicStore
 	service.knowledgeStore = knowledgeStore
+	service.contextResolver = NewContextResolver(normalized.DataDir, topicStore, knowledgeStore)
 	return service, nil
 }
 
@@ -170,6 +174,16 @@ func (s *Service) DeleteKnowledgeDocument(scope string, scopeID string, filename
 		return false, ErrKnowledgeStoreUnavailable
 	}
 	return s.knowledgeStore.Delete(scope, scopeID, filename)
+}
+
+func (s *Service) GetLeadContextPreview(lead model.Lead) (LeadContextPreview, error) {
+	if err := s.ensureEnabled(); err != nil {
+		return LeadContextPreview{}, err
+	}
+	if s.contextResolver == nil {
+		return LeadContextPreview{}, ErrContextResolverUnavailable
+	}
+	return s.contextResolver.Resolve(lead)
 }
 
 func (s *Service) ensureEnabled() error {

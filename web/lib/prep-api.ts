@@ -1,9 +1,11 @@
 import {
   DEFAULT_PREP_META,
   DEFAULT_PREP_SCOPES,
+  PrepContextSource,
   PrepKnowledgeDocument,
   PrepKnowledgeDocumentCreateInput,
   PrepKnowledgeDocumentUpdateInput,
+  PrepLeadContextPreview,
   PrepMeta,
   PrepScope,
   PrepTopic,
@@ -36,6 +38,22 @@ interface APIKnowledgeDocument {
   filename?: string;
   content?: string;
   updated_at?: string;
+}
+
+interface APIPrepContextSource {
+  scope?: string;
+  kind?: string;
+  title?: string;
+}
+
+interface APIPrepLeadContextPreview {
+  lead_id?: string;
+  company?: string;
+  position?: string;
+  has_resume?: boolean;
+  has_profile?: boolean;
+  topic_keys?: string[];
+  sources?: APIPrepContextSource[];
 }
 
 interface APIListPayload<T> {
@@ -109,6 +127,33 @@ function normalizeDocument(raw: APIKnowledgeDocument): PrepKnowledgeDocument {
   };
 }
 
+function normalizeContextSource(raw: APIPrepContextSource): PrepContextSource {
+  return {
+    scope: (raw.scope || "").trim(),
+    kind: (raw.kind || "").trim(),
+    title: (raw.title || "").trim(),
+  };
+}
+
+function normalizeContextPreview(raw: APIPrepLeadContextPreview | undefined): PrepLeadContextPreview {
+  const sources = Array.isArray(raw?.sources) ? raw.sources.map(normalizeContextSource) : [];
+  const topicKeys = Array.isArray(raw?.topic_keys)
+    ? raw.topic_keys
+        .map((key) => (key || "").trim())
+        .filter((key) => key.length > 0)
+    : [];
+
+  return {
+    leadId: (raw?.lead_id || "").trim(),
+    company: (raw?.company || "").trim(),
+    position: (raw?.position || "").trim(),
+    hasResume: Boolean(raw?.has_resume),
+    hasProfile: Boolean(raw?.has_profile),
+    topicKeys,
+    sources,
+  };
+}
+
 async function parseAPIError(response: Response, fallback: string): Promise<Error> {
   try {
     const payload = (await response.json()) as APIErrorPayload;
@@ -156,6 +201,24 @@ export async function listPrepTopics(signal?: AbortSignal): Promise<PrepTopic[]>
   const payload = (await response.json()) as APIListPayload<APITopic>;
   const topics = Array.isArray(payload.data) ? payload.data : [];
   return topics.map(normalizeTopic);
+}
+
+export async function fetchPrepLeadContextPreview(leadId: string, signal?: AbortSignal): Promise<PrepLeadContextPreview> {
+  const normalizedLeadID = (leadId || "").trim();
+  if (!normalizedLeadID) {
+    throw new Error("lead_id is required");
+  }
+
+  const response = await fetch(getAPIURL(`/api/prep/leads/${encodeSegment(normalizedLeadID)}/context-preview`), {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+    signal,
+  });
+  if (!response.ok) {
+    throw await parseAPIError(response, "加载备面上下文失败");
+  }
+  const payload = (await response.json()) as APISinglePayload<APIPrepLeadContextPreview>;
+  return normalizeContextPreview(payload.data);
 }
 
 export async function createPrepTopic(input: PrepTopicCreateInput): Promise<PrepTopic> {

@@ -131,6 +131,7 @@ func NewRouter(leads storage.LeadStore, candidates storage.CandidateStore, leadT
 
 		prep := api.Group("/prep")
 		prep.GET("/meta", h.getPrepMeta)
+		prep.GET("/leads/:lead_id/context-preview", h.getPrepLeadContextPreview)
 		prep.GET("/topics", h.listPrepTopics)
 		prep.POST("/topics", h.createPrepTopic)
 		prep.PATCH("/topics/:key", h.updatePrepTopic)
@@ -678,6 +679,44 @@ func (h *handler) getPrepMeta(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": h.prep.GetMeta()})
 }
 
+func (h *handler) getPrepLeadContextPreview(c *gin.Context) {
+	if h.prep == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"message": "prep service is not configured"})
+		return
+	}
+	if h.leads == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"message": "lead service is not configured"})
+		return
+	}
+
+	leadID := strings.TrimSpace(c.Param("lead_id"))
+	if leadID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "lead_id is required"})
+		return
+	}
+
+	var target model.Lead
+	found := false
+	for _, item := range h.leads.List() {
+		if item.ID == leadID {
+			target = item
+			found = true
+			break
+		}
+	}
+	if !found {
+		c.JSON(http.StatusNotFound, gin.H{"message": "lead not found"})
+		return
+	}
+
+	preview, err := h.prep.GetLeadContextPreview(target)
+	if err != nil {
+		respondPrepError(c, "get prep context preview failed", err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": preview})
+}
+
 func (h *handler) listPrepTopics(c *gin.Context) {
 	if h.prep == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"message": "prep service is not configured"})
@@ -1030,6 +1069,10 @@ func respondPrepError(c *gin.Context, message string, err error) {
 		return
 	}
 	if errors.Is(err, prep.ErrPrepDisabled) || errors.Is(err, prep.ErrTopicStoreUnavailable) || errors.Is(err, prep.ErrKnowledgeStoreUnavailable) {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"message": err.Error()})
+		return
+	}
+	if errors.Is(err, prep.ErrContextResolverUnavailable) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"message": err.Error()})
 		return
 	}
