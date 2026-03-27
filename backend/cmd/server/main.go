@@ -18,6 +18,7 @@ import (
 	"trace2offer/backend/internal/discovery"
 	"trace2offer/backend/internal/heartbeat"
 	"trace2offer/backend/internal/lead"
+	"trace2offer/backend/internal/prep"
 	"trace2offer/backend/internal/reminder"
 	"trace2offer/backend/internal/stats"
 	"trace2offer/backend/internal/storage"
@@ -73,6 +74,14 @@ func main() {
 	if err != nil {
 		log.Fatalf("init heartbeat service failed: %v", err)
 	}
+	prepConfig, err := prep.LoadConfig(dataDir)
+	if err != nil {
+		log.Fatalf("load prep config failed: %v", err)
+	}
+	prepService, err := prep.NewService(prepConfig)
+	if err != nil {
+		log.Fatalf("init prep service failed: %v", err)
+	}
 
 	maxSteps, err := getenvInt("T2O_AGENT_MAX_STEPS", 6)
 	if err != nil {
@@ -114,7 +123,7 @@ func main() {
 
 	go heartbeatService.Start(context.Background())
 
-	router := api.NewRouter(leadStore, candidateStore, leadTimelineStore, runtime, statsService, reminderService, heartbeatService, calendarService, discoveryService)
+	router := api.NewRouter(leadStore, candidateStore, leadTimelineStore, runtime, statsService, reminderService, heartbeatService, calendarService, discoveryService, prepService)
 	addr := ":" + port
 	log.Printf("trace2offer backend listening on %s", addr)
 	if err := router.Run(addr); err != nil {

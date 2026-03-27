@@ -19,6 +19,7 @@ import (
 	"trace2offer/backend/internal/discovery"
 	"trace2offer/backend/internal/heartbeat"
 	"trace2offer/backend/internal/model"
+	"trace2offer/backend/internal/prep"
 	"trace2offer/backend/internal/reminder"
 	"trace2offer/backend/internal/stats"
 	"trace2offer/backend/internal/storage"
@@ -57,6 +58,14 @@ func TestLeadAndChatAPI(t *testing.T) {
 		t.Fatalf("init heartbeat service: %v", err)
 	}
 	_ = heartbeatService.RunOnce(time.Now().UTC())
+	prepConfig, err := prep.LoadConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("load prep config: %v", err)
+	}
+	prepService, err := prep.NewService(prepConfig)
+	if err != nil {
+		t.Fatalf("init prep service: %v", err)
+	}
 
 	feedServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/rss+xml")
@@ -74,9 +83,28 @@ func TestLeadAndChatAPI(t *testing.T) {
 	}))
 	defer feedServer.Close()
 
-	router := NewRouter(leadStore, candidateStore, leadTimelineStore, &stubAgentRuntime{}, statsService, reminderService, heartbeatService, calendar.NewService(leadStore), discoveryService)
+	router := NewRouter(leadStore, candidateStore, leadTimelineStore, &stubAgentRuntime{}, statsService, reminderService, heartbeatService, calendar.NewService(leadStore), discoveryService, prepService)
 
-	resp := doJSONRequest(t, router, http.MethodGet, "/api/leads", nil)
+	resp := doJSONRequest(t, router, http.MethodGet, "/api/prep/meta", nil)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("GET /api/prep/meta status=%d body=%s", resp.Code, resp.Body.String())
+	}
+
+	var prepMetaPayload struct {
+		Data prep.Meta `json:"data"`
+	}
+	decodeJSONBody(t, resp, &prepMetaPayload)
+	if !prepMetaPayload.Data.Enabled {
+		t.Fatal("expected prep meta enabled true")
+	}
+	if prepMetaPayload.Data.DefaultQuestionCount != 8 {
+		t.Fatalf("expected default_question_count=8, got %d", prepMetaPayload.Data.DefaultQuestionCount)
+	}
+	if len(prepMetaPayload.Data.SupportedScopes) != 3 {
+		t.Fatalf("expected 3 supported scopes, got %d", len(prepMetaPayload.Data.SupportedScopes))
+	}
+
+	resp = doJSONRequest(t, router, http.MethodGet, "/api/leads", nil)
 	if resp.Code != http.StatusOK {
 		t.Fatalf("GET /api/leads status=%d body=%s", resp.Code, resp.Body.String())
 	}

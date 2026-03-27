@@ -20,6 +20,7 @@ import (
 	"trace2offer/backend/internal/heartbeat"
 	"trace2offer/backend/internal/lead"
 	"trace2offer/backend/internal/model"
+	"trace2offer/backend/internal/prep"
 	"trace2offer/backend/internal/reminder"
 	"trace2offer/backend/internal/stats"
 	"trace2offer/backend/internal/storage"
@@ -48,9 +49,10 @@ type handler struct {
 	heartbeat    *heartbeat.Service
 	calendar     *calendar.Service
 	timelines    *timeline.Service
+	prep         *prep.Service
 }
 
-func NewRouter(leads storage.LeadStore, candidates storage.CandidateStore, leadTimelines storage.LeadTimelineStore, runtime AgentRuntime, statsService *stats.Service, reminderService *reminder.Service, heartbeatService *heartbeat.Service, calendarService *calendar.Service, discoveryService *discovery.Service) *gin.Engine {
+func NewRouter(leads storage.LeadStore, candidates storage.CandidateStore, leadTimelines storage.LeadTimelineStore, runtime AgentRuntime, statsService *stats.Service, reminderService *reminder.Service, heartbeatService *heartbeat.Service, calendarService *calendar.Service, discoveryService *discovery.Service, prepService *prep.Service) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery(), corsMiddleware())
 
@@ -66,6 +68,7 @@ func NewRouter(leads storage.LeadStore, candidates storage.CandidateStore, leadT
 		heartbeat:    heartbeatService,
 		calendar:     calendarService,
 		timelines:    timelineService,
+		prep:         prepService,
 	}
 
 	r.GET("/health", func(c *gin.Context) {
@@ -125,6 +128,9 @@ func NewRouter(leads storage.LeadStore, candidates storage.CandidateStore, leadT
 		heartbeat := api.Group("/heartbeat")
 		heartbeat.GET("/status", h.getHeartbeatStatus)
 		heartbeat.GET("/reports/latest", h.getHeartbeatReportsLatest)
+
+		prep := api.Group("/prep")
+		prep.GET("/meta", h.getPrepMeta)
 
 		api.GET("/calendar/interviews.ics", h.exportInterviewICS)
 		api.GET("/caldav/trace2offer", h.exportInterviewICS)
@@ -654,6 +660,14 @@ func (h *handler) getHeartbeatReportsLatest(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"data": reports})
+}
+
+func (h *handler) getPrepMeta(c *gin.Context) {
+	if h.prep == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"message": "prep service is not configured"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": h.prep.GetMeta()})
 }
 
 func (h *handler) exportInterviewICS(c *gin.Context) {
