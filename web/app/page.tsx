@@ -5,9 +5,10 @@ import { LeadsTable } from "@/components/leads-table";
 import { CandidatesTable } from "@/components/candidates-table";
 import { LeadTimelineBoard } from "@/components/lead-timeline-board";
 import { StatsCards } from "@/components/stats-cards";
+import { PrepLibraryWorkspace } from "@/components/prep/prep-library-workspace";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-const MAIN_TABS = ["leads", "dashboard"] as const;
+const MAIN_TABS = ["leads", "library", "dashboard"] as const;
 type MainTabValue = (typeof MAIN_TABS)[number];
 const LEAD_VIEW_TABS = ["candidates", "table", "timeline"] as const;
 type LeadViewTabValue = (typeof LEAD_VIEW_TABS)[number];
@@ -50,10 +51,10 @@ export default function HomePage() {
               onValueChange={(value) => setActiveMainTab(value as MainTabValue)}
               className="space-y-4"
             >
-              <TabsList className="relative !grid h-11 !w-full grid-cols-2 rounded-full border border-border/70 bg-background/70 p-1">
+              <TabsList className="relative !grid h-11 !w-full grid-cols-3 rounded-full border border-border/70 bg-background/70 p-1">
                 <span
                   aria-hidden
-                  className="pointer-events-none absolute inset-y-1 left-1 w-[calc((100%-0.5rem)/2)] rounded-full bg-background/95 shadow-sm transition-transform duration-300 ease-[var(--ease-fluid)]"
+                  className="pointer-events-none absolute inset-y-1 left-1 w-[calc((100%-0.5rem)/3)] rounded-full bg-background/95 shadow-sm transition-transform duration-300 ease-[var(--ease-fluid)]"
                   style={{ transform: `translateX(${activeMainTabIndex * 100}%)` }}
                 />
                 <TabsTrigger
@@ -61,6 +62,12 @@ export default function HomePage() {
                   className="relative z-10 rounded-full border-none bg-transparent px-4 text-muted-foreground transition-colors duration-300 ease-[var(--ease-fluid)] data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none"
                 >
                   线索管理
+                </TabsTrigger>
+                <TabsTrigger
+                  value="library"
+                  className="relative z-10 rounded-full border-none bg-transparent px-4 text-muted-foreground transition-colors duration-300 ease-[var(--ease-fluid)] data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none"
+                >
+                  资料库
                 </TabsTrigger>
                 <TabsTrigger
                   value="dashboard"
@@ -126,6 +133,10 @@ export default function HomePage() {
                     <LeadTimelineBoard />
                   </TabsContent>
                 </Tabs>
+              </TabsContent>
+
+              <TabsContent value="library">
+                <PrepLibraryWorkspace />
               </TabsContent>
 
               <TabsContent value="dashboard">

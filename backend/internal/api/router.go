@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -131,6 +132,10 @@ func NewRouter(leads storage.LeadStore, candidates storage.CandidateStore, leadT
 
 		prep := api.Group("/prep")
 		prep.GET("/meta", h.getPrepMeta)
+		prep.GET("/index/status", h.getPrepIndexStatus)
+		prep.GET("/index/documents", h.listPrepIndexDocuments)
+		prep.GET("/index/chunks", h.listPrepIndexChunks)
+		prep.POST("/index/rebuild", h.rebuildPrepIndex)
 		prep.GET("/leads/:lead_id/context-preview", h.getPrepLeadContextPreview)
 		prep.GET("/topics", h.listPrepTopics)
 		prep.POST("/topics", h.createPrepTopic)
@@ -140,6 +145,10 @@ func NewRouter(leads storage.LeadStore, candidates storage.CandidateStore, leadT
 		prep.POST("/knowledge/:scope/:scope_id/documents", h.createPrepKnowledgeDocument)
 		prep.PUT("/knowledge/:scope/:scope_id/documents/:filename", h.updatePrepKnowledgeDocument)
 		prep.DELETE("/knowledge/:scope/:scope_id/documents/:filename", h.deletePrepKnowledgeDocument)
+		prep.POST("/retrieval/preview", h.searchPrepRetrieval)
+		prep.POST("/sessions", h.createPrepSession)
+		prep.GET("/sessions/:session_id", h.getPrepSession)
+		prep.PUT("/sessions/:session_id/draft-answers", h.updatePrepDraftAnswers)
 
 		api.GET("/calendar/interviews.ics", h.exportInterviewICS)
 		api.GET("/caldav/trace2offer", h.exportInterviewICS)
@@ -679,6 +688,83 @@ func (h *handler) getPrepMeta(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": h.prep.GetMeta()})
 }
 
+func (h *handler) getPrepIndexStatus(c *gin.Context) {
+	if h.prep == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"message": "prep service is not configured"})
+		return
+	}
+
+	status, err := h.prep.GetIndexStatus()
+	if err != nil {
+		respondPrepError(c, "get prep index status failed", err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": status})
+}
+
+func (h *handler) listPrepIndexDocuments(c *gin.Context) {
+	if h.prep == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"message": "prep service is not configured"})
+		return
+	}
+
+	documents, err := h.prep.ListIndexDocuments()
+	if err != nil {
+		respondPrepError(c, "list prep index documents failed", err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": documents})
+}
+
+func (h *handler) listPrepIndexChunks(c *gin.Context) {
+	if h.prep == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"message": "prep service is not configured"})
+		return
+	}
+
+	documentID := strings.TrimSpace(c.Query("document_id"))
+	limitRaw := strings.TrimSpace(c.Query("limit"))
+	limit := 200
+	if limitRaw != "" {
+		parsed, err := strconv.Atoi(limitRaw)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"message": "limit must be an integer"})
+			return
+		}
+		if parsed <= 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"message": "limit must be greater than 0"})
+			return
+		}
+		limit = parsed
+	}
+
+	chunks, err := h.prep.ListIndexChunks(documentID, limit)
+	if err != nil {
+		respondPrepError(c, "list prep index chunks failed", err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": chunks})
+}
+
+func (h *handler) rebuildPrepIndex(c *gin.Context) {
+	if h.prep == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"message": "prep service is not configured"})
+		return
+	}
+
+	input, ok := bindPrepIndexRebuildInput(c)
+	if !ok {
+		return
+	}
+
+	summary, err := h.prep.RebuildIndexWithMode(input.Scope, input.ScopeID, input.Mode)
+	if err != nil {
+		respondPrepError(c, "rebuild prep index failed", err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": summary})
+}
+
 func (h *handler) getPrepLeadContextPreview(c *gin.Context) {
 	if h.prep == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"message": "prep service is not configured"})
@@ -865,6 +951,136 @@ func (h *handler) deletePrepKnowledgeDocument(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
+func (h *handler) searchPrepRetrieval(c *gin.Context) {
+	if h.prep == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"message": "prep service is not configured"})
+		return
+	}
+
+	input, ok := bindPrepSearchInput(c)
+	if !ok {
+		return
+	}
+
+	if strings.TrimSpace(input.LeadID) != "" {
+		if h.leads == nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"message": "lead service is not configured"})
+			return
+		}
+		lead, found := findLeadByID(h.leads.List(), input.LeadID)
+		if !found {
+			c.JSON(http.StatusNotFound, gin.H{"message": "lead not found"})
+			return
+		}
+		input.CompanySlug = strings.TrimSpace(prep.NormalizeCompanySlug(lead.Company))
+	}
+
+	result, err := h.prep.Search(input)
+	if err != nil {
+		respondPrepError(c, "search prep retrieval failed", err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": result})
+}
+
+func (h *handler) updatePrepDraftAnswers(c *gin.Context) {
+	if h.prep == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"message": "prep service is not configured"})
+		return
+	}
+
+	input, ok := bindPrepDraftAnswersInput(c)
+	if !ok {
+		return
+	}
+
+	sessionID := strings.TrimSpace(c.Param("session_id"))
+	if sessionID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "session_id is required"})
+		return
+	}
+
+	err := h.prep.SaveDraftAnswers(sessionID, input.Answers)
+	if err != nil {
+		if errors.Is(err, prep.ErrSessionNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"message": "prep session not found"})
+			return
+		}
+		respondPrepError(c, "save prep draft answers failed", err)
+		return
+	}
+
+	session, err := h.prep.GetSession(sessionID)
+	if err != nil {
+		if errors.Is(err, prep.ErrSessionNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"message": "prep session not found"})
+			return
+		}
+		respondPrepError(c, "load prep session after saving draft answers failed", err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": prep.SaveDraftAnswersResult{
+		SessionID:    strings.TrimSpace(session.ID),
+		SavedAt:      session.UpdatedAt,
+		AnswersCount: len(session.Answers),
+	}})
+}
+
+func (h *handler) createPrepSession(c *gin.Context) {
+	if h.prep == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"message": "prep service is not configured"})
+		return
+	}
+	if h.leads == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"message": "lead service is not configured"})
+		return
+	}
+
+	input, ok := bindPrepCreateSessionInput(c)
+	if !ok {
+		return
+	}
+
+	lead, found := findLeadByID(h.leads.List(), input.LeadID)
+	if !found {
+		c.JSON(http.StatusNotFound, gin.H{"message": "lead not found"})
+		return
+	}
+
+	created, err := h.prep.CreateSession(c.Request.Context(), lead, input)
+	if err != nil {
+		respondPrepError(c, "create prep session failed", err)
+		return
+	}
+	c.JSON(http.StatusCreated, gin.H{"data": created})
+}
+
+func (h *handler) getPrepSession(c *gin.Context) {
+	if h.prep == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"message": "prep service is not configured"})
+		return
+	}
+
+	sessionID := strings.TrimSpace(c.Param("session_id"))
+	if sessionID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "session_id is required"})
+		return
+	}
+
+	session, err := h.prep.GetSession(sessionID)
+	if err != nil {
+		if errors.Is(err, prep.ErrSessionNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"message": "prep session not found"})
+			return
+		}
+		respondPrepError(c, "get prep session failed", err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": session})
+}
+
 func (h *handler) exportInterviewICS(c *gin.Context) {
 	if h.calendar == nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "calendar service is not configured"})
@@ -1025,6 +1241,62 @@ func bindPrepKnowledgeUpdateInput(c *gin.Context) (prep.KnowledgeDocumentUpdateI
 	return input, true
 }
 
+func bindPrepIndexRebuildInput(c *gin.Context) (prep.RebuildIndexInput, bool) {
+	var input prep.RebuildIndexInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid prep index rebuild payload", "error": err.Error()})
+		return prep.RebuildIndexInput{}, false
+	}
+	return input, true
+}
+
+func bindPrepSearchInput(c *gin.Context) (prep.SearchConfig, bool) {
+	var input prep.SearchConfig
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid prep retrieval payload", "error": err.Error()})
+		return prep.SearchConfig{}, false
+	}
+	return input, true
+}
+
+func bindPrepCreateSessionInput(c *gin.Context) (prep.CreateSessionInput, bool) {
+	var input prep.CreateSessionInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid prep session payload", "error": err.Error()})
+		return prep.CreateSessionInput{}, false
+	}
+	if strings.TrimSpace(input.LeadID) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "lead_id is required"})
+		return prep.CreateSessionInput{}, false
+	}
+	return input, true
+}
+
+func findLeadByID(leads []model.Lead, leadID string) (model.Lead, bool) {
+	normalizedLeadID := strings.TrimSpace(leadID)
+	for _, item := range leads {
+		if item.ID == normalizedLeadID {
+			return item, true
+		}
+	}
+	return model.Lead{}, false
+}
+
+func bindPrepDraftAnswersInput(c *gin.Context) (struct {
+	Answers []prep.Answer `json:"answers"`
+}, bool) {
+	var input struct {
+		Answers []prep.Answer `json:"answers"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid prep draft answers payload", "error": err.Error()})
+		return struct {
+			Answers []prep.Answer `json:"answers"`
+		}{}, false
+	}
+	return input, true
+}
+
 func respondLeadError(c *gin.Context, message string, err error) {
 	if lead.IsValidationError(err) {
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
@@ -1068,7 +1340,7 @@ func respondPrepError(c *gin.Context, message string, err error) {
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return
 	}
-	if errors.Is(err, prep.ErrPrepDisabled) || errors.Is(err, prep.ErrTopicStoreUnavailable) || errors.Is(err, prep.ErrKnowledgeStoreUnavailable) {
+	if errors.Is(err, prep.ErrPrepDisabled) || errors.Is(err, prep.ErrTopicStoreUnavailable) || errors.Is(err, prep.ErrKnowledgeStoreUnavailable) || errors.Is(err, prep.ErrIndexStoreUnavailable) || errors.Is(err, prep.ErrSessionStoreUnavailable) || errors.Is(err, prep.ErrIngestionUnavailable) || errors.Is(err, prep.ErrQuestionGeneratorUnavailable) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"message": err.Error()})
 		return
 	}

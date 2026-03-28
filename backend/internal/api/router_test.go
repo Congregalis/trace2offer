@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/textproto"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -63,7 +64,18 @@ func TestLeadAndChatAPI(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load prep config: %v", err)
 	}
-	prepService, err := prep.NewService(prepConfig)
+	prepIndexStore, err := prep.NewIndexStore(prepConfig.IndexDBPath)
+	if err != nil {
+		t.Fatalf("init prep index store: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = prepIndexStore.Close()
+	})
+	prepService, err := prep.NewService(
+		prepConfig,
+		prep.WithIndexStore(prepIndexStore),
+		prep.WithEmbeddingProvider(&stubPrepEmbeddingProvider{}),
+	)
 	if err != nil {
 		t.Fatalf("init prep service: %v", err)
 	}
@@ -101,8 +113,8 @@ func TestLeadAndChatAPI(t *testing.T) {
 	if prepMetaPayload.Data.DefaultQuestionCount != 8 {
 		t.Fatalf("expected default_question_count=8, got %d", prepMetaPayload.Data.DefaultQuestionCount)
 	}
-	if len(prepMetaPayload.Data.SupportedScopes) != 3 {
-		t.Fatalf("expected 3 supported scopes, got %d", len(prepMetaPayload.Data.SupportedScopes))
+	if len(prepMetaPayload.Data.SupportedScopes) != 1 {
+		t.Fatalf("expected 1 supported scope, got %d", len(prepMetaPayload.Data.SupportedScopes))
 	}
 
 	resp = doJSONRequest(t, router, http.MethodGet, "/api/prep/topics", nil)
@@ -195,6 +207,63 @@ func TestLeadAndChatAPI(t *testing.T) {
 		t.Fatalf("expected listed document content updated, got %q", documentListPayload.Data[0].Content)
 	}
 
+	resp = doJSONRequest(t, router, http.MethodPost, "/api/prep/index/rebuild", map[string]any{
+		"scope":    "topics",
+		"scope_id": "rag",
+	})
+	if resp.Code != http.StatusOK {
+		t.Fatalf("POST /api/prep/index/rebuild status=%d body=%s", resp.Code, resp.Body.String())
+	}
+	var indexSummaryPayload struct {
+		Data prep.IndexRunSummary `json:"data"`
+	}
+	decodeJSONBody(t, resp, &indexSummaryPayload)
+	if indexSummaryPayload.Data.RunID == "" {
+		t.Fatalf("expected index run id populated")
+	}
+	if indexSummaryPayload.Data.Mode != prep.RebuildModeIncremental {
+		t.Fatalf("expected default rebuild mode incremental, got %+v", indexSummaryPayload.Data)
+	}
+	if indexSummaryPayload.Data.DocumentsScanned == 0 {
+		t.Fatalf("expected index rebuild scans documents, got %+v", indexSummaryPayload.Data)
+	}
+
+	resp = doJSONRequest(t, router, http.MethodPost, "/api/prep/index/rebuild", map[string]any{
+		"scope": "*",
+		"mode":  "full",
+	})
+	if resp.Code != http.StatusOK {
+		t.Fatalf("POST /api/prep/index/rebuild full status=%d body=%s", resp.Code, resp.Body.String())
+	}
+	decodeJSONBody(t, resp, &indexSummaryPayload)
+	if indexSummaryPayload.Data.Mode != prep.RebuildModeFull {
+		t.Fatalf("expected full rebuild mode, got %+v", indexSummaryPayload.Data)
+	}
+
+	resp = doJSONRequest(t, router, http.MethodGet, "/api/prep/index/documents", nil)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("GET /api/prep/index/documents status=%d body=%s", resp.Code, resp.Body.String())
+	}
+	var indexDocumentListPayload struct {
+		Data []prep.Document `json:"data"`
+	}
+	decodeJSONBody(t, resp, &indexDocumentListPayload)
+	if len(indexDocumentListPayload.Data) == 0 {
+		t.Fatal("expected indexed documents not empty")
+	}
+
+	resp = doJSONRequest(t, router, http.MethodGet, "/api/prep/index/chunks?document_id="+url.QueryEscape(indexDocumentListPayload.Data[0].ID)+"&limit=20", nil)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("GET /api/prep/index/chunks status=%d body=%s", resp.Code, resp.Body.String())
+	}
+	var indexChunkListPayload struct {
+		Data []prep.IndexedChunk `json:"data"`
+	}
+	decodeJSONBody(t, resp, &indexChunkListPayload)
+	if len(indexChunkListPayload.Data) == 0 {
+		t.Fatal("expected indexed chunks not empty")
+	}
+
 	resp = doJSONRequest(t, router, http.MethodGet, "/api/leads", nil)
 	if resp.Code != http.StatusOK {
 		t.Fatalf("GET /api/leads status=%d body=%s", resp.Code, resp.Body.String())
@@ -259,22 +328,6 @@ func TestLeadAndChatAPI(t *testing.T) {
 		t.Fatalf("write user_profile.json: %v", err)
 	}
 
-	resp = doJSONRequest(t, router, http.MethodPost, "/api/prep/knowledge/companies/openai/documents", map[string]any{
-		"filename": "culture",
-		"content":  "# OpenAI Culture\n\nhigh bar",
-	})
-	if resp.Code != http.StatusCreated {
-		t.Fatalf("POST /api/prep/knowledge/companies/:scope_id/documents status=%d body=%s", resp.Code, resp.Body.String())
-	}
-
-	resp = doJSONRequest(t, router, http.MethodPost, "/api/prep/knowledge/leads/"+leadID+"/documents", map[string]any{
-		"filename": "notes",
-		"content":  "focus on system design",
-	})
-	if resp.Code != http.StatusCreated {
-		t.Fatalf("POST /api/prep/knowledge/leads/:scope_id/documents status=%d body=%s", resp.Code, resp.Body.String())
-	}
-
 	resp = doJSONRequest(t, router, http.MethodGet, "/api/prep/leads/"+leadID+"/context-preview", nil)
 	if resp.Code != http.StatusOK {
 		t.Fatalf("GET /api/prep/leads/:lead_id/context-preview status=%d body=%s", resp.Code, resp.Body.String())
@@ -298,11 +351,148 @@ func TestLeadAndChatAPI(t *testing.T) {
 	if !hasPrepContextSource(contextPreviewPayload.Data.Sources, "lead", "jd_text", "JD 原文") {
 		t.Fatalf("expected jd source in context preview, got %+v", contextPreviewPayload.Data.Sources)
 	}
-	if !hasPrepContextSource(contextPreviewPayload.Data.Sources, "company", "markdown", "openai/culture.md") {
-		t.Fatalf("expected company markdown source in context preview, got %+v", contextPreviewPayload.Data.Sources)
+	resp = doJSONRequest(t, router, http.MethodPost, "/api/prep/retrieval/preview", map[string]any{
+		"lead_id":       leadID,
+		"query":         "RAG 常见面试问题",
+		"topic_keys":    []string{"rag"},
+		"top_k":         5,
+		"include_trace": true,
+	})
+	if resp.Code != http.StatusOK {
+		t.Fatalf("POST /api/prep/retrieval/preview status=%d body=%s", resp.Code, resp.Body.String())
 	}
-	if !hasPrepContextSource(contextPreviewPayload.Data.Sources, "lead", "markdown", leadID+"/notes.md") {
-		t.Fatalf("expected lead markdown source in context preview, got %+v", contextPreviewPayload.Data.Sources)
+	var retrievalPreviewPayload struct {
+		Data prep.SearchResult `json:"data"`
+	}
+	decodeJSONBody(t, resp, &retrievalPreviewPayload)
+	if retrievalPreviewPayload.Data.NormalizedQuery == "" {
+		t.Fatalf("expected normalized_query in retrieval payload")
+	}
+	if retrievalPreviewPayload.Data.Trace == nil {
+		t.Fatalf("expected retrieval trace in retrieval payload")
+	}
+
+	resp = doJSONRequest(t, router, http.MethodPost, "/api/prep/sessions", map[string]any{
+		"lead_id":           leadID,
+		"topic_keys":        []string{"rag"},
+		"question_count":    2,
+		"include_resume":    true,
+		"include_profile":   true,
+		"include_lead_docs": true,
+	})
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("POST /api/prep/sessions status=%d body=%s", resp.Code, resp.Body.String())
+	}
+	var createdPrepSessionPayload struct {
+		Data prep.Session `json:"data"`
+	}
+	decodeJSONBody(t, resp, &createdPrepSessionPayload)
+	if createdPrepSessionPayload.Data.ID == "" {
+		t.Fatal("expected created prep session id")
+	}
+	if createdPrepSessionPayload.Data.GenerationTrace.RetrievalQuery == "" {
+		t.Fatal("expected generation trace retrieval query")
+	}
+
+	resp = doJSONRequest(t, router, http.MethodGet, "/api/prep/sessions/"+createdPrepSessionPayload.Data.ID, nil)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("GET /api/prep/sessions/:session_id status=%d body=%s", resp.Code, resp.Body.String())
+	}
+	decodeJSONBody(t, resp, &createdPrepSessionPayload)
+	if createdPrepSessionPayload.Data.ID == "" {
+		t.Fatal("expected session detail id")
+	}
+
+	sessionFixture := prep.Session{
+		ID:       "prep_01",
+		LeadID:   leadID,
+		Company:  "OpenAI",
+		Position: "Go Backend Engineer",
+		Status:   prep.PrepSessionStatusDraft,
+		Questions: []prep.Question{{
+			ID:      1,
+			Type:    "open",
+			Content: "What is RAG?",
+		}, {
+			ID:      2,
+			Type:    "open",
+			Content: "How does retrieval work?",
+		}},
+		CreatedAt: time.Now().UTC().Add(-time.Minute).Format(time.RFC3339),
+		UpdatedAt: time.Now().UTC().Add(-time.Minute).Format(time.RFC3339),
+	}
+	sessionFixtureRaw, err := json.MarshalIndent(sessionFixture, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal prep session fixture: %v", err)
+	}
+	sessionFixturePath := filepath.Join(tmpDir, "prep", "sessions", "prep_01.json")
+	if err := os.WriteFile(sessionFixturePath, sessionFixtureRaw, 0o644); err != nil {
+		t.Fatalf("write prep session fixture: %v", err)
+	}
+
+	resp = doJSONRequest(t, router, http.MethodPut, "/api/prep/sessions/prep_01/draft-answers", map[string]any{
+		"answers": []map[string]any{
+			{"question_id": 1, "answer": "RAG stands for Retrieval-Augmented Generation"},
+			{"question_id": 2, "answer": "Retriever + Generator"},
+		},
+	})
+	if resp.Code != http.StatusOK {
+		t.Fatalf("PUT /api/prep/sessions/:session_id/draft-answers status=%d body=%s", resp.Code, resp.Body.String())
+	}
+	var saveDraftPayload struct {
+		Data prep.SaveDraftAnswersResult `json:"data"`
+	}
+	decodeJSONBody(t, resp, &saveDraftPayload)
+	if saveDraftPayload.Data.SessionID != "prep_01" {
+		t.Fatalf("expected session_id=prep_01, got %q", saveDraftPayload.Data.SessionID)
+	}
+	if saveDraftPayload.Data.AnswersCount != 2 {
+		t.Fatalf("expected answers_count=2, got %d", saveDraftPayload.Data.AnswersCount)
+	}
+	if saveDraftPayload.Data.SavedAt == "" {
+		t.Fatalf("expected non-empty saved_at")
+	}
+
+	storedSessionRaw, err := os.ReadFile(sessionFixturePath)
+	if err != nil {
+		t.Fatalf("read updated prep session fixture: %v", err)
+	}
+	var storedSession prep.Session
+	if err := json.Unmarshal(storedSessionRaw, &storedSession); err != nil {
+		t.Fatalf("decode updated prep session fixture: %v", err)
+	}
+	if len(storedSession.Answers) != 2 {
+		t.Fatalf("expected 2 persisted answers, got %d", len(storedSession.Answers))
+	}
+
+	resp = doJSONRequest(t, router, http.MethodPut, "/api/prep/sessions/prep_01/draft-answers", map[string]any{
+		"answers": []map[string]any{{"question_id": 99, "answer": "invalid question"}},
+	})
+	if resp.Code != http.StatusBadRequest {
+		t.Fatalf("PUT /api/prep/sessions/:session_id/draft-answers invalid question status=%d body=%s", resp.Code, resp.Body.String())
+	}
+
+	sessionFixture.Status = prep.PrepSessionStatusSubmitted
+	sessionFixtureRaw, err = json.MarshalIndent(sessionFixture, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal submitted prep session fixture: %v", err)
+	}
+	if err := os.WriteFile(sessionFixturePath, sessionFixtureRaw, 0o644); err != nil {
+		t.Fatalf("write submitted prep session fixture: %v", err)
+	}
+
+	resp = doJSONRequest(t, router, http.MethodPut, "/api/prep/sessions/prep_01/draft-answers", map[string]any{
+		"answers": []map[string]any{{"question_id": 1, "answer": "should fail when submitted"}},
+	})
+	if resp.Code != http.StatusBadRequest {
+		t.Fatalf("PUT /api/prep/sessions/:session_id/draft-answers submitted status=%d body=%s", resp.Code, resp.Body.String())
+	}
+
+	resp = doJSONRequest(t, router, http.MethodPut, "/api/prep/sessions/missing/draft-answers", map[string]any{
+		"answers": []map[string]any{{"question_id": 1, "answer": "x"}},
+	})
+	if resp.Code != http.StatusNotFound {
+		t.Fatalf("PUT /api/prep/sessions/:session_id/draft-answers missing status=%d body=%s", resp.Code, resp.Body.String())
 	}
 
 	resp = doJSONRequest(t, router, http.MethodDelete, "/api/prep/knowledge/topics/rag/documents/overview.md", nil)
@@ -819,10 +1009,114 @@ func TestLeadAndChatAPI(t *testing.T) {
 	}
 }
 
+func TestPrepEndpointsReturnConfigErrorWhenHFUnavailable(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	leadStore, err := storage.NewFileLeadStore(filepath.Join(tmpDir, "leads.json"))
+	if err != nil {
+		t.Fatalf("init lead store: %v", err)
+	}
+	candidateStore, err := storage.NewFileCandidateStore(filepath.Join(tmpDir, "candidates.json"))
+	if err != nil {
+		t.Fatalf("init candidate store: %v", err)
+	}
+	leadTimelineStore, err := storage.NewFileLeadTimelineStore(filepath.Join(tmpDir, "lead_timelines.json"))
+	if err != nil {
+		t.Fatalf("init lead timeline store: %v", err)
+	}
+	statsService := stats.NewService(leadStore)
+	reminderService := reminder.NewService(leadStore)
+
+	prepConfig, err := prep.LoadConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("load prep config: %v", err)
+	}
+	prepService, err := prep.NewService(prepConfig)
+	if err != nil {
+		t.Fatalf("init prep service: %v", err)
+	}
+	if _, err := prepService.CreateTopic(prep.TopicCreateInput{Key: "rag", Name: "RAG", Description: "retrieval"}); err != nil {
+		t.Fatalf("create prep topic: %v", err)
+	}
+
+	leadList := leadStore.List()
+	if len(leadList) == 0 {
+		t.Fatal("expected seeded leads")
+	}
+	leadID := strings.TrimSpace(leadList[0].ID)
+	if leadID == "" {
+		t.Fatal("expected non-empty lead id")
+	}
+
+	router := NewRouter(leadStore, candidateStore, leadTimelineStore, nil, statsService, reminderService, nil, nil, nil, prepService)
+
+	assertConfigError := func(resp *httptest.ResponseRecorder, route string) {
+		t.Helper()
+		if resp.Code != http.StatusBadRequest {
+			t.Fatalf("%s expected 400, got %d body=%s", route, resp.Code, resp.Body.String())
+		}
+		var payload struct {
+			Message string `json:"message"`
+		}
+		decodeJSONBody(t, resp, &payload)
+		if !strings.Contains(payload.Message, "T2O_PREP_HF_API_KEY") {
+			t.Fatalf("%s expected message contains T2O_PREP_HF_API_KEY, got %q", route, payload.Message)
+		}
+	}
+
+	resp := doJSONRequest(t, router, http.MethodPost, "/api/prep/index/rebuild", map[string]any{
+		"scope": "*",
+	})
+	assertConfigError(resp, "/api/prep/index/rebuild")
+
+	resp = doJSONRequest(t, router, http.MethodPost, "/api/prep/retrieval/preview", map[string]any{
+		"lead_id":           leadID,
+		"query":             "RAG",
+		"topic_keys":        []string{"rag"},
+		"include_resume":    true,
+		"include_profile":   true,
+		"include_lead_docs": true,
+	})
+	assertConfigError(resp, "/api/prep/retrieval/preview")
+
+	resp = doJSONRequest(t, router, http.MethodPost, "/api/prep/sessions", map[string]any{
+		"lead_id":           leadID,
+		"topic_keys":        []string{"rag"},
+		"question_count":    1,
+		"include_resume":    true,
+		"include_profile":   true,
+		"include_lead_docs": true,
+	})
+	assertConfigError(resp, "/api/prep/sessions")
+}
+
 type stubAgentRuntime struct {
 	settings agentruntime.RuntimeSettings
 	profile  agentruntime.UserProfile
 	sessions map[string]agentruntime.SessionView
+}
+
+type stubPrepEmbeddingProvider struct{}
+
+func (p *stubPrepEmbeddingProvider) Name() string {
+	return "stub"
+}
+
+func (p *stubPrepEmbeddingProvider) Model() string {
+	return "stub-v1"
+}
+
+func (p *stubPrepEmbeddingProvider) Dimension() int {
+	return 2
+}
+
+func (p *stubPrepEmbeddingProvider) Embed(texts []string) ([][]float32, error) {
+	vectors := make([][]float32, 0, len(texts))
+	for range texts {
+		vectors = append(vectors, []float32{0.5, 0.5})
+	}
+	return vectors, nil
 }
 
 func (s *stubAgentRuntime) Run(_ context.Context, request agentruntime.Request) (agentruntime.Response, error) {

@@ -78,7 +78,23 @@ func main() {
 	if err != nil {
 		log.Fatalf("load prep config failed: %v", err)
 	}
-	prepService, err := prep.NewService(prepConfig)
+
+	var prepOptions []prep.ServiceOption
+	if strings.TrimSpace(getenv("OPENAI_API_KEY", "")) != "" {
+		questionModel, modelErr := prep.NewOpenAIQuestionModel(
+			getenv("OPENAI_API_KEY", ""),
+			getenv("T2O_OPENAI_BASE_URL", ""),
+			model,
+			60*time.Second,
+		)
+		if modelErr != nil {
+			log.Printf("init prep question model skipped: %v", modelErr)
+		} else {
+			prepOptions = append(prepOptions, prep.WithQuestionModel(questionModel))
+		}
+	}
+
+	prepService, err := prep.NewService(prepConfig, prepOptions...)
 	if err != nil {
 		log.Fatalf("init prep service failed: %v", err)
 	}

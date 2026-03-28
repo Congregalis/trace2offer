@@ -2,12 +2,25 @@ import {
   DEFAULT_PREP_META,
   DEFAULT_PREP_SCOPES,
   PrepContextSource,
+  PrepCreateSessionInput,
+  PrepIndexChunk,
+  PrepIndexDocument,
+  PrepIndexStatus,
+  PrepIndexRebuildInput,
+  PrepIndexRunError,
+  PrepIndexRunSummary,
   PrepKnowledgeDocument,
   PrepKnowledgeDocumentCreateInput,
   PrepKnowledgeDocumentUpdateInput,
+  PrepDraftAnswersSaveResult,
+  PrepAnswer,
   PrepLeadContextPreview,
   PrepMeta,
+  PrepQuestion,
+  PrepRetrievalPreview,
+  PrepRetrievalPreviewRequest,
   PrepScope,
+  PrepSession,
   PrepTopic,
   PrepTopicCreateInput,
   PrepTopicPatchInput,
@@ -54,6 +67,161 @@ interface APIPrepLeadContextPreview {
   has_profile?: boolean;
   topic_keys?: string[];
   sources?: APIPrepContextSource[];
+}
+
+interface APIPrepIndexRunSummary {
+  run_id?: string;
+  mode?: string;
+  started_at?: string;
+  completed_at?: string;
+  status?: string;
+  documents_scanned?: number;
+  documents_indexed?: number;
+  documents_skipped?: number;
+  documents_deleted?: number;
+  chunks_created?: number;
+  chunks_updated?: number;
+  errors?: Array<{ source?: string; message?: string }>;
+}
+
+interface APIPrepIndexStatus {
+  embedding_provider?: string;
+  embedding_model?: string;
+  document_count?: number;
+  chunk_count?: number;
+  last_indexed_at?: string;
+  last_index_status?: string;
+}
+
+interface APIPrepIndexDocument {
+  id?: string;
+  scope?: string;
+  scope_id?: string;
+  kind?: string;
+  title?: string;
+  source_path?: string;
+  content_hash?: string;
+  updated_at?: string;
+}
+
+interface APIPrepIndexChunk {
+  id?: string;
+  document_id?: string;
+  scope?: string;
+  scope_id?: string;
+  document_title?: string;
+  chunk_index?: number;
+  content?: string;
+  token_count?: number;
+  updated_at?: string;
+}
+
+interface APIRetrievedChunk {
+  id?: string;
+  content?: string;
+  score?: number;
+  why_selected?: string;
+  source?: {
+    scope?: string;
+    scope_id?: string;
+    document_title?: string;
+    chunk_index?: number;
+  };
+}
+
+interface APIRetrievalPreview {
+  query?: string;
+  normalized_query?: string;
+  filters?: {
+    scope?: string[];
+    topic_keys?: string[];
+  };
+  trace?: {
+    stage_query_normalization?: APITraceStage;
+    stage_initial_retrieval?: APITraceStage;
+    stage_deduplication?: APITraceStage;
+    stage_reranking?: APITraceStage;
+  };
+  candidate_chunks?: APIRetrievedChunk[];
+  retrieved_chunks?: APIRetrievedChunk[];
+  final_context?: {
+    total_tokens?: number;
+    chunks_used?: number;
+    context?: string;
+  };
+}
+
+interface APITraceStage {
+  input?: string;
+  output?: string;
+  method?: string;
+  input_count?: number;
+  output_count?: number;
+  metadata?: Record<string, unknown>;
+}
+
+interface APIPrepQuestion {
+  id?: number;
+  type?: string;
+  content?: string;
+  expected_points?: string[];
+  context_sources?: string[];
+}
+
+interface APIPrepAnswer {
+  question_id?: number;
+  answer?: string;
+  submitted_at?: string;
+}
+
+interface APIPrepSession {
+  id?: string;
+  lead_id?: string;
+  company?: string;
+  position?: string;
+  status?: string;
+  config?: {
+    topic_keys?: string[];
+    question_count?: number;
+    include_resume?: boolean;
+    include_profile?: boolean;
+    include_lead_docs?: boolean;
+  };
+  sources?: APIPrepContextSource[];
+  questions?: APIPrepQuestion[];
+  answers?: APIPrepAnswer[];
+  evaluation?: unknown;
+  reference_answers?: Record<string, unknown>;
+  generation_trace?: {
+    input_snapshot?: {
+      lead_id?: string;
+      topic_keys?: string[];
+      question_count?: number;
+    };
+    retrieval_query?: string;
+    retrieval_results?: {
+      candidates_found?: number;
+      final_selected?: number;
+      sources?: string[];
+    };
+    prompt_sections?: Array<{
+      title?: string;
+      content?: string;
+    }>;
+    generation_result?: {
+      questions_generated?: number;
+      generation_time_ms?: number;
+      model?: string;
+    };
+  };
+  created_at?: string;
+  updated_at?: string;
+}
+
+interface APIPrepDraftAnswersSaveResult {
+  session_id?: string;
+  saved_at?: string;
+  answers_count?: number;
 }
 
 interface APIListPayload<T> {
@@ -154,6 +322,272 @@ function normalizeContextPreview(raw: APIPrepLeadContextPreview | undefined): Pr
   };
 }
 
+function normalizeIndexRunSummary(raw: APIPrepIndexRunSummary | undefined): PrepIndexRunSummary {
+  const errors: PrepIndexRunError[] = Array.isArray(raw?.errors)
+    ? raw.errors
+        .map((item) => ({
+          source: (item?.source || "").trim(),
+          message: (item?.message || "").trim(),
+        }))
+        .filter((item) => item.source.length > 0 || item.message.length > 0)
+    : [];
+
+  return {
+    runId: (raw?.run_id || "").trim(),
+    mode: (raw?.mode || "").trim() || "incremental",
+    startedAt: (raw?.started_at || "").trim(),
+    completedAt: (raw?.completed_at || "").trim(),
+    status: (raw?.status || "").trim(),
+    documentsScanned: typeof raw?.documents_scanned === "number" ? raw.documents_scanned : 0,
+    documentsIndexed: typeof raw?.documents_indexed === "number" ? raw.documents_indexed : 0,
+    documentsSkipped: typeof raw?.documents_skipped === "number" ? raw.documents_skipped : 0,
+    documentsDeleted: typeof raw?.documents_deleted === "number" ? raw.documents_deleted : 0,
+    chunksCreated: typeof raw?.chunks_created === "number" ? raw.chunks_created : 0,
+    chunksUpdated: typeof raw?.chunks_updated === "number" ? raw.chunks_updated : 0,
+    errors,
+  };
+}
+
+function normalizeIndexStatus(raw: APIPrepIndexStatus | undefined): PrepIndexStatus {
+  return {
+    embeddingProvider: (raw?.embedding_provider || "").trim(),
+    embeddingModel: (raw?.embedding_model || "").trim(),
+    documentCount: typeof raw?.document_count === "number" ? raw.document_count : 0,
+    chunkCount: typeof raw?.chunk_count === "number" ? raw.chunk_count : 0,
+    lastIndexedAt: (raw?.last_indexed_at || "").trim(),
+    lastIndexStatus: (raw?.last_index_status || "").trim(),
+  };
+}
+
+function normalizeIndexDocument(raw: APIPrepIndexDocument): PrepIndexDocument {
+  return {
+    id: (raw.id || "").trim(),
+    scope: normalizeScope(raw.scope || ""),
+    scopeId: (raw.scope_id || "").trim(),
+    kind: (raw.kind || "").trim(),
+    title: (raw.title || "").trim(),
+    sourcePath: (raw.source_path || "").trim(),
+    contentHash: (raw.content_hash || "").trim(),
+    updatedAt: (raw.updated_at || "").trim(),
+  };
+}
+
+function normalizeIndexChunk(raw: APIPrepIndexChunk): PrepIndexChunk {
+  return {
+    id: (raw.id || "").trim(),
+    documentId: (raw.document_id || "").trim(),
+    scope: normalizeScope(raw.scope || ""),
+    scopeId: (raw.scope_id || "").trim(),
+    documentTitle: (raw.document_title || "").trim(),
+    chunkIndex: typeof raw.chunk_index === "number" && Number.isFinite(raw.chunk_index) ? Math.max(0, Math.floor(raw.chunk_index)) : 0,
+    content: raw.content || "",
+    tokenCount: typeof raw.token_count === "number" && Number.isFinite(raw.token_count) ? Math.max(0, Math.floor(raw.token_count)) : 0,
+    updatedAt: (raw.updated_at || "").trim(),
+  };
+}
+
+function normalizeRetrievalPreview(raw: APIRetrievalPreview | undefined): PrepRetrievalPreview {
+  const topicKeys = Array.isArray(raw?.filters?.topic_keys)
+    ? raw.filters.topic_keys.map((item) => (item || "").trim()).filter((item) => item.length > 0)
+    : [];
+
+  const normalizeRetrievedChunks = (chunks: APIRetrievedChunk[] | undefined) =>
+    Array.isArray(chunks)
+      ? chunks.map((chunk) => ({
+          id: (chunk.id || "").trim(),
+          content: chunk.content || "",
+          score: typeof chunk.score === "number" && Number.isFinite(chunk.score) ? chunk.score : 0,
+          source: {
+            scope: normalizeScope(chunk.source?.scope || ""),
+            scopeId: (chunk.source?.scope_id || "").trim(),
+            documentTitle: (chunk.source?.document_title || "").trim(),
+            chunkIndex:
+              typeof chunk.source?.chunk_index === "number" && Number.isFinite(chunk.source.chunk_index)
+                ? Math.max(0, Math.floor(chunk.source.chunk_index))
+                : 0,
+          },
+          whySelected: (chunk.why_selected || "").trim(),
+        }))
+      : [];
+  const candidateChunks = normalizeRetrievedChunks(raw?.candidate_chunks);
+  const retrievedChunks = normalizeRetrievedChunks(raw?.retrieved_chunks);
+
+  return {
+    query: (raw?.query || "").trim(),
+    normalizedQuery: (raw?.normalized_query || "").trim(),
+    filters: {
+      scope: normalizePrepScopes(raw?.filters?.scope),
+      topicKeys,
+    },
+    trace: raw?.trace
+      ? {
+          stageQueryNormalization: normalizeTraceStage(raw.trace.stage_query_normalization),
+          stageInitialRetrieval: normalizeTraceStage(raw.trace.stage_initial_retrieval),
+          stageDeduplication: normalizeTraceStage(raw.trace.stage_deduplication),
+          stageReranking: normalizeTraceStage(raw.trace.stage_reranking),
+        }
+      : undefined,
+    candidateChunks,
+    retrievedChunks,
+    finalContext: {
+      totalTokens:
+        typeof raw?.final_context?.total_tokens === "number" && Number.isFinite(raw.final_context.total_tokens)
+          ? Math.max(0, Math.floor(raw.final_context.total_tokens))
+          : 0,
+      chunksUsed:
+        typeof raw?.final_context?.chunks_used === "number" && Number.isFinite(raw.final_context.chunks_used)
+          ? Math.max(0, Math.floor(raw.final_context.chunks_used))
+          : 0,
+      context: raw?.final_context?.context || "",
+    },
+  };
+}
+
+function normalizeTraceStage(raw: APITraceStage | undefined) {
+  return {
+    input: typeof raw?.input === "string" ? raw.input.trim() : undefined,
+    output: typeof raw?.output === "string" ? raw.output.trim() : undefined,
+    method: (raw?.method || "").trim(),
+    inputCount:
+      typeof raw?.input_count === "number" && Number.isFinite(raw.input_count)
+        ? Math.max(0, Math.floor(raw.input_count))
+        : undefined,
+    outputCount:
+      typeof raw?.output_count === "number" && Number.isFinite(raw.output_count)
+        ? Math.max(0, Math.floor(raw.output_count))
+        : undefined,
+    metadata: raw?.metadata && typeof raw.metadata === "object" ? raw.metadata : undefined,
+  };
+}
+
+function normalizeQuestion(raw: APIPrepQuestion): PrepQuestion {
+  const expectedPoints = Array.isArray(raw.expected_points)
+    ? raw.expected_points.map((item) => (item || "").trim()).filter((item) => item.length > 0)
+    : [];
+  const contextSources = Array.isArray(raw.context_sources)
+    ? raw.context_sources.map((item) => (item || "").trim()).filter((item) => item.length > 0)
+    : [];
+
+  return {
+    id: typeof raw.id === "number" && Number.isFinite(raw.id) ? Math.max(0, Math.floor(raw.id)) : 0,
+    type: (raw.type || "").trim(),
+    content: (raw.content || "").trim(),
+    expectedPoints,
+    contextSources,
+  };
+}
+
+function normalizeAnswer(raw: APIPrepAnswer): PrepAnswer {
+  return {
+    questionId: typeof raw.question_id === "number" && Number.isFinite(raw.question_id) ? Math.max(0, Math.floor(raw.question_id)) : 0,
+    answer: raw.answer || "",
+    submittedAt: (raw.submitted_at || "").trim() || undefined,
+  };
+}
+
+function normalizeSession(raw: APIPrepSession | undefined): PrepSession {
+  const questions = Array.isArray(raw?.questions)
+    ? raw.questions.map(normalizeQuestion).filter((item) => item.id > 0)
+    : [];
+  const answers = Array.isArray(raw?.answers)
+    ? raw.answers.map(normalizeAnswer).filter((item) => item.questionId > 0)
+    : [];
+  const sources = Array.isArray(raw?.sources) ? raw.sources.map(normalizeContextSource) : [];
+  const topicKeys = Array.isArray(raw?.config?.topic_keys)
+    ? raw.config.topic_keys.map((item) => (item || "").trim()).filter((item) => item.length > 0)
+    : [];
+  const traceSourceTitles = Array.isArray(raw?.generation_trace?.retrieval_results?.sources)
+    ? raw.generation_trace?.retrieval_results?.sources?.map((item) => (item || "").trim()).filter((item) => item.length > 0)
+    : [];
+  const promptSections = Array.isArray(raw?.generation_trace?.prompt_sections)
+    ? raw.generation_trace.prompt_sections
+        .map((section) => ({
+          title: (section?.title || "").trim(),
+          content: (section?.content || "").trim(),
+        }))
+        .filter((section) => section.title.length > 0 || section.content.length > 0)
+    : [];
+  const generationTrace = raw?.generation_trace
+    ? {
+        inputSnapshot: {
+          leadId: (raw?.generation_trace?.input_snapshot?.lead_id || "").trim(),
+          topicKeys: Array.isArray(raw?.generation_trace?.input_snapshot?.topic_keys)
+            ? raw.generation_trace?.input_snapshot?.topic_keys
+                ?.map((item) => (item || "").trim())
+                .filter((item) => item.length > 0)
+            : [],
+          questionCount:
+            typeof raw?.generation_trace?.input_snapshot?.question_count === "number" &&
+            Number.isFinite(raw.generation_trace.input_snapshot.question_count)
+              ? Math.max(0, Math.floor(raw.generation_trace.input_snapshot.question_count))
+              : 0,
+        },
+        retrievalQuery: (raw?.generation_trace?.retrieval_query || "").trim(),
+        retrievalResults: {
+          candidatesFound:
+            typeof raw?.generation_trace?.retrieval_results?.candidates_found === "number" &&
+            Number.isFinite(raw.generation_trace.retrieval_results.candidates_found)
+              ? Math.max(0, Math.floor(raw.generation_trace.retrieval_results.candidates_found))
+              : 0,
+          finalSelected:
+            typeof raw?.generation_trace?.retrieval_results?.final_selected === "number" &&
+            Number.isFinite(raw.generation_trace.retrieval_results.final_selected)
+              ? Math.max(0, Math.floor(raw.generation_trace.retrieval_results.final_selected))
+              : 0,
+          sources: traceSourceTitles,
+        },
+        promptSections,
+        generationResult: {
+          questionsGenerated:
+            typeof raw?.generation_trace?.generation_result?.questions_generated === "number" &&
+            Number.isFinite(raw.generation_trace.generation_result.questions_generated)
+              ? Math.max(0, Math.floor(raw.generation_trace.generation_result.questions_generated))
+              : 0,
+          generationTimeMs:
+            typeof raw?.generation_trace?.generation_result?.generation_time_ms === "number" &&
+            Number.isFinite(raw.generation_trace.generation_result.generation_time_ms)
+              ? Math.max(0, Math.floor(raw.generation_trace.generation_result.generation_time_ms))
+              : 0,
+          model: (raw?.generation_trace?.generation_result?.model || "").trim(),
+        },
+      }
+    : undefined;
+
+  return {
+    id: (raw?.id || "").trim(),
+    leadId: (raw?.lead_id || "").trim(),
+    company: (raw?.company || "").trim(),
+    position: (raw?.position || "").trim(),
+    status: (raw?.status || "").trim(),
+    config: {
+      topicKeys,
+      questionCount:
+        typeof raw?.config?.question_count === "number" && Number.isFinite(raw.config.question_count)
+          ? Math.max(0, Math.floor(raw.config.question_count))
+          : 0,
+      includeResume: Boolean(raw?.config?.include_resume),
+      includeProfile: Boolean(raw?.config?.include_profile),
+      includeLeadDocs: Boolean(raw?.config?.include_lead_docs),
+    },
+    sources,
+    questions,
+    answers,
+    evaluation: raw?.evaluation,
+    referenceAnswers: raw?.reference_answers || {},
+    generationTrace,
+    createdAt: (raw?.created_at || "").trim(),
+    updatedAt: (raw?.updated_at || "").trim(),
+  };
+}
+
+function normalizeDraftAnswersSaveResult(raw: APIPrepDraftAnswersSaveResult | undefined): PrepDraftAnswersSaveResult {
+  return {
+    sessionId: (raw?.session_id || "").trim(),
+    savedAt: (raw?.saved_at || "").trim(),
+    answersCount: typeof raw?.answers_count === "number" && Number.isFinite(raw.answers_count) ? Math.max(0, Math.floor(raw.answers_count)) : 0,
+  };
+}
+
 async function parseAPIError(response: Response, fallback: string): Promise<Error> {
   try {
     const payload = (await response.json()) as APIErrorPayload;
@@ -219,6 +653,78 @@ export async function fetchPrepLeadContextPreview(leadId: string, signal?: Abort
   }
   const payload = (await response.json()) as APISinglePayload<APIPrepLeadContextPreview>;
   return normalizeContextPreview(payload.data);
+}
+
+export async function rebuildPrepIndex(input: PrepIndexRebuildInput): Promise<PrepIndexRunSummary> {
+  const response = await fetch(getAPIURL("/api/prep/index/rebuild"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      scope: (input.scope || "*").toString().trim() || "*",
+      scope_id: (input.scopeId || "").trim(),
+      mode: (input.mode || "incremental").trim(),
+    }),
+  });
+  if (!response.ok) {
+    throw await parseAPIError(response, "重建索引失败");
+  }
+  const payload = (await response.json()) as APISinglePayload<APIPrepIndexRunSummary>;
+  return normalizeIndexRunSummary(payload.data);
+}
+
+export async function fetchPrepIndexStatus(signal?: AbortSignal): Promise<PrepIndexStatus> {
+  const response = await fetch(getAPIURL("/api/prep/index/status"), {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+    signal,
+  });
+  if (!response.ok) {
+    throw await parseAPIError(response, "加载索引状态失败");
+  }
+
+  const payload = (await response.json()) as APISinglePayload<APIPrepIndexStatus>;
+  return normalizeIndexStatus(payload.data);
+}
+
+export async function listPrepIndexDocuments(signal?: AbortSignal): Promise<PrepIndexDocument[]> {
+  const response = await fetch(getAPIURL("/api/prep/index/documents"), {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+    signal,
+  });
+  if (!response.ok) {
+    throw await parseAPIError(response, "加载索引文档失败");
+  }
+  const payload = (await response.json()) as APIListPayload<APIPrepIndexDocument>;
+  const documents = Array.isArray(payload.data) ? payload.data : [];
+  return documents.map(normalizeIndexDocument);
+}
+
+export async function listPrepIndexChunks(
+  options: { documentId?: string; limit?: number } = {},
+  signal?: AbortSignal,
+): Promise<PrepIndexChunk[]> {
+  const query = new URLSearchParams();
+  if ((options.documentId || "").trim()) {
+    query.set("document_id", (options.documentId || "").trim());
+  }
+  if (typeof options.limit === "number" && Number.isFinite(options.limit) && options.limit > 0) {
+    query.set("limit", String(Math.floor(options.limit)));
+  }
+  const suffix = query.toString();
+  const url = suffix ? `/api/prep/index/chunks?${suffix}` : "/api/prep/index/chunks";
+
+  const response = await fetch(getAPIURL(url), {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+    signal,
+  });
+  if (!response.ok) {
+    throw await parseAPIError(response, "加载索引 chunks 失败");
+  }
+  const payload = (await response.json()) as APIListPayload<APIPrepIndexChunk>;
+  const chunks = Array.isArray(payload.data) ? payload.data : [];
+  return chunks.map(normalizeIndexChunk);
 }
 
 export async function createPrepTopic(input: PrepTopicCreateInput): Promise<PrepTopic> {
@@ -349,4 +855,104 @@ export async function deletePrepKnowledgeDocument(scope: PrepScope, scopeId: str
   if (!response.ok) {
     throw await parseAPIError(response, "删除备面资料失败");
   }
+}
+
+export async function previewPrepRetrieval(input: PrepRetrievalPreviewRequest, signal?: AbortSignal): Promise<PrepRetrievalPreview> {
+  const response = await fetch(getAPIURL("/api/prep/retrieval/preview"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      lead_id: (input.leadId || "").trim(),
+      query: (input.query || "").trim(),
+      topic_keys: Array.isArray(input.topicKeys) ? input.topicKeys.map((item) => (item || "").trim()).filter((item) => item.length > 0) : [],
+      top_k: typeof input.topK === "number" && Number.isFinite(input.topK) ? Math.max(1, Math.floor(input.topK)) : undefined,
+      include_trace: typeof input.includeTrace === "boolean" ? input.includeTrace : true,
+      include_resume: typeof input.includeResume === "boolean" ? input.includeResume : true,
+      include_profile: typeof input.includeProfile === "boolean" ? input.includeProfile : true,
+      include_lead_docs: typeof input.includeLeadDocs === "boolean" ? input.includeLeadDocs : true,
+    }),
+    signal,
+  });
+  if (!response.ok) {
+    throw await parseAPIError(response, "加载检索预览失败");
+  }
+
+  const payload = (await response.json()) as APISinglePayload<APIRetrievalPreview>;
+  return normalizeRetrievalPreview(payload.data);
+}
+
+export async function fetchPrepSession(sessionId: string, signal?: AbortSignal): Promise<PrepSession> {
+  const normalizedSessionID = (sessionId || "").trim();
+  if (!normalizedSessionID) {
+    throw new Error("session_id is required");
+  }
+
+  const response = await fetch(getAPIURL(`/api/prep/sessions/${encodeSegment(normalizedSessionID)}`), {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+    signal,
+  });
+  if (!response.ok) {
+    throw await parseAPIError(response, "加载备面会话失败");
+  }
+
+  const payload = (await response.json()) as APISinglePayload<APIPrepSession>;
+  return normalizeSession(payload.data);
+}
+
+export async function createPrepSession(input: PrepCreateSessionInput): Promise<PrepSession> {
+  const normalizedLeadID = (input.leadId || "").trim();
+  if (!normalizedLeadID) {
+    throw new Error("lead_id is required");
+  }
+
+  const response = await fetch(getAPIURL("/api/prep/sessions"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      lead_id: normalizedLeadID,
+      topic_keys: Array.isArray(input.topicKeys)
+        ? input.topicKeys.map((item) => (item || "").trim()).filter((item) => item.length > 0)
+        : [],
+      question_count:
+        typeof input.questionCount === "number" && Number.isFinite(input.questionCount)
+          ? Math.max(1, Math.floor(input.questionCount))
+          : DEFAULT_PREP_META.defaultQuestionCount,
+      include_resume: Boolean(input.includeResume),
+      include_profile: Boolean(input.includeProfile),
+      include_lead_docs: Boolean(input.includeLeadDocs),
+    }),
+  });
+  if (!response.ok) {
+    throw await parseAPIError(response, "生成备面题目失败");
+  }
+
+  const payload = (await response.json()) as APISinglePayload<APIPrepSession>;
+  return normalizeSession(payload.data);
+}
+
+export async function savePrepDraftAnswers(sessionId: string, answers: PrepAnswer[]): Promise<PrepDraftAnswersSaveResult> {
+  const normalizedSessionID = (sessionId || "").trim();
+  if (!normalizedSessionID) {
+    throw new Error("session_id is required");
+  }
+
+  const normalizedAnswers = answers
+    .map((item) => ({
+      question_id: Number.isFinite(item.questionId) ? Math.floor(item.questionId) : 0,
+      answer: item.answer || "",
+    }))
+    .filter((item) => item.question_id > 0);
+
+  const response = await fetch(getAPIURL(`/api/prep/sessions/${encodeSegment(normalizedSessionID)}/draft-answers`), {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ answers: normalizedAnswers }),
+  });
+  if (!response.ok) {
+    throw await parseAPIError(response, "保存答案草稿失败");
+  }
+
+  const payload = (await response.json()) as APISinglePayload<APIPrepDraftAnswersSaveResult>;
+  return normalizeDraftAnswersSaveResult(payload.data);
 }

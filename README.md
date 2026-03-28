@@ -122,6 +122,68 @@ OPENAI_API_KEY=your_openai_api_key
 - 默认数据目录是 `backend/data`。
 - 默认后端端口是 `8080`，前端默认跑在 `3000`。
 
+如果你要使用 `Interview Prep` 的本地 embedding（推荐）：
+
+1. 按你的机器环境启动 Hugging Face TEI（会自动下载模型）：
+
+`macOS (Apple Silicon: M1/M2/M3)`：
+
+- 推荐直接用 `Homebrew` 安装本地 TEI 二进制。
+- 不推荐优先走官方预构建 Docker 镜像，因为 ARM64 机器经常会遇到 manifest 不匹配；而且即使用 Docker，在 Apple Silicon 上也只是 CPU 跑，收益一般。
+
+```bash
+brew install text-embeddings-inference
+
+text-embeddings-router \
+  --model-id intfloat/multilingual-e5-small \
+  --port 8081
+```
+
+`macOS (Intel)`：
+
+- 也建议优先用 `Homebrew`，启动方式和 Apple Silicon 一样。
+
+`Linux x86_64`：
+
+- 最省事的是直接用官方 CPU Docker 镜像。
+
+```bash
+docker run --rm -p 8081:80 ghcr.io/huggingface/text-embeddings-inference:cpu-1.9 \
+  --model-id intfloat/multilingual-e5-small
+```
+
+`Linux ARM64` 或 `macOS Apple Silicon 但你坚持要 Docker`：
+
+- 官方预构建镜像不一定提供可直接运行的 ARM64 manifest，这时要自己构建镜像。
+
+```bash
+git clone https://github.com/huggingface/text-embeddings-inference.git
+cd text-embeddings-inference
+docker build . -f Dockerfile --platform=linux/arm64 -t tei-arm64
+docker run --rm -p 8081:80 tei-arm64 --model-id intfloat/multilingual-e5-small
+```
+
+2. 在 `backend/.env` 增加：
+
+```bash
+T2O_PREP_HF_BASE_URL=http://127.0.0.1:8081/embed
+T2O_PREP_HF_MODEL=intfloat/multilingual-e5-small
+```
+
+说明：
+
+- 配了 `T2O_PREP_HF_BASE_URL` 就走本地 TEI，不依赖 `T2O_PREP_HF_API_KEY`。
+- 不配 `T2O_PREP_HF_BASE_URL` 时会走 Hugging Face Inference API，这时必须配置 `T2O_PREP_HF_API_KEY`。
+- 对 `macOS Apple Silicon`，当前最推荐的路径就是 `Homebrew + text-embeddings-router`，别上来就拿 Docker 硬怼。
+
+首次切换 embedding 模型后，记得重建索引：
+
+```bash
+curl -X POST http://127.0.0.1:8080/api/prep/index/rebuild \
+  -H 'Content-Type: application/json' \
+  -d '{"scope":"*"}'
+```
+
 ### 4. 启动项目
 
 在仓库根目录执行：
@@ -163,6 +225,8 @@ make smoke
 cd web
 pnpm dev
 pnpm build
+pnpm lint
+pnpm e2e
 ```
 
 
@@ -177,4 +241,3 @@ pnpm build
 - 目前是本地优先、单用户形态，不是多租户 SaaS。
 - 模型 provider 目前只接了 `OpenAI Responses`。
 - 数据靠本地文件持久化，适合个人使用、原型验证和快速迭代。
-

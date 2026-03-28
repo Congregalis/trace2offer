@@ -238,7 +238,7 @@ func normalizeScopeAndID(scopeRaw string, scopeIDRaw string) (Scope, string, err
 func normalizeScope(scopeRaw string) (Scope, error) {
 	scope := Scope(strings.TrimSpace(scopeRaw))
 	if !isSupportedScope(scope) {
-		return "", &ValidationError{Field: "scope", Message: "scope must be one of topics/companies/leads"}
+		return "", &ValidationError{Field: "scope", Message: "only topics scope is supported"}
 	}
 	return scope, nil
 }

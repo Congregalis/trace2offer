@@ -95,19 +95,6 @@ func (r *ContextResolver) Resolve(lead model.Lead) (LeadContextPreview, error) {
 	}
 	preview.Sources = append(preview.Sources, topicSources...)
 
-	companySlug := normalizeCompanySlug(preview.Company)
-	companySources, err := r.collectMarkdownSources(ScopeCompanies, companySlug, "company")
-	if err != nil {
-		return LeadContextPreview{}, err
-	}
-	preview.Sources = append(preview.Sources, companySources...)
-
-	leadSources, err := r.collectMarkdownSources(ScopeLeads, preview.LeadID, "lead")
-	if err != nil {
-		return LeadContextPreview{}, err
-	}
-	preview.Sources = append(preview.Sources, leadSources...)
-
 	return preview, nil
 }
 
@@ -211,6 +198,70 @@ func normalizeCompanySlug(company string) string {
 	slug := strings.ToLower(strings.TrimSpace(company))
 	slug = companySlugPattern.ReplaceAllString(slug, "-")
 	return strings.Trim(slug, "-")
+}
+
+func NormalizeCompanySlug(company string) string {
+	return normalizeCompanySlug(company)
+}
+
+func (r *ContextResolver) BuildPromptCandidateProfile(lead model.Lead) string {
+	if r == nil {
+		return buildLeadSummaryForPrompt(lead)
+	}
+
+	sections := []string{buildLeadSummaryForPrompt(lead)}
+	if resumeText, ok := r.readResumeText(); ok {
+		sections = append(sections, "Resume:\n"+resumeText)
+	}
+	if profileText, ok := r.readProfileText(); ok {
+		sections = append(sections, "User Profile:\n"+profileText)
+	}
+	return strings.TrimSpace(strings.Join(sections, "\n\n"))
+}
+
+func (r *ContextResolver) readResumeText() (string, bool) {
+	if r == nil {
+		return "", false
+	}
+	content, err := os.ReadFile(r.resumePath)
+	if err != nil {
+		return "", false
+	}
+	trimmed := strings.TrimSpace(string(content))
+	return trimmed, trimmed != ""
+}
+
+func (r *ContextResolver) readProfileText() (string, bool) {
+	if r == nil {
+		return "", false
+	}
+	content, err := os.ReadFile(r.userProfilePath)
+	if err != nil {
+		return "", false
+	}
+	trimmed := strings.TrimSpace(string(content))
+	return trimmed, trimmed != ""
+}
+
+func buildLeadSummaryForPrompt(lead model.Lead) string {
+	lines := []string{
+		"Lead Summary:",
+		fmt.Sprintf("- Company: %s", strings.TrimSpace(lead.Company)),
+		fmt.Sprintf("- Position: %s", strings.TrimSpace(lead.Position)),
+	}
+	if source := strings.TrimSpace(lead.Source); source != "" {
+		lines = append(lines, fmt.Sprintf("- Source: %s", source))
+	}
+	if location := strings.TrimSpace(lead.Location); location != "" {
+		lines = append(lines, fmt.Sprintf("- Location: %s", location))
+	}
+	if jdURL := strings.TrimSpace(lead.JDURL); jdURL != "" {
+		lines = append(lines, fmt.Sprintf("- JD URL: %s", jdURL))
+	}
+	if notes := strings.TrimSpace(lead.Notes); notes != "" {
+		lines = append(lines, fmt.Sprintf("- Notes: %s", notes))
+	}
+	return strings.TrimSpace(strings.Join(lines, "\n"))
 }
 
 func jsonValueHasContent(value any) bool {

@@ -5,8 +5,6 @@ import { PrepScope } from "@/lib/prep-types";
 
 const SCOPE_LABELS: Record<PrepScope, string> = {
   topics: "Topic",
-  companies: "公司",
-  leads: "线索",
 };
 
 export interface KnowledgeScopeSwitcherProps {

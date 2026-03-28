@@ -44,3 +44,4 @@ web/tsconfig.tsbuildinfo
 
 # Backend runtime artifacts
 backend/data
+backend/server

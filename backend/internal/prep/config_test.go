@@ -22,9 +22,24 @@ func TestLoadConfigDefaults(t *testing.T) {
 	if cfg.DataDir != filepath.Join("/tmp/t2o-data", "prep") {
 		t.Fatalf("unexpected prep data dir: %q", cfg.DataDir)
 	}
+	if cfg.EmbeddingProvider != "huggingface" {
+		t.Fatalf("expected embedding provider huggingface, got %q", cfg.EmbeddingProvider)
+	}
+	if cfg.EmbeddingModel != defaultHFModel {
+		t.Fatalf("expected default embedding model %q, got %q", defaultHFModel, cfg.EmbeddingModel)
+	}
+	if cfg.EmbeddingDimension != 1024 {
+		t.Fatalf("expected default embedding dimension 1024, got %d", cfg.EmbeddingDimension)
+	}
+	if cfg.HuggingFaceBaseURL != "" {
+		t.Fatalf("expected empty huggingface base url by default, got %q", cfg.HuggingFaceBaseURL)
+	}
+	if cfg.IndexDBPath != filepath.Join("/tmp/t2o-data", "prep", "prep_index.sqlite") {
+		t.Fatalf("unexpected prep index db path: %q", cfg.IndexDBPath)
+	}
 
 	gotScopes := scopeNames(cfg.SupportedScopes)
-	wantScopes := []string{"topics", "companies", "leads"}
+	wantScopes := []string{"topics"}
 	if len(gotScopes) != len(wantScopes) {
 		t.Fatalf("expected %d scopes, got %d", len(wantScopes), len(gotScopes))
 	}
@@ -42,6 +57,9 @@ func TestLoadConfigWithOverrides(t *testing.T) {
 		envPrepEnabled:              "false",
 		envPrepDefaultQuestionCount: "12",
 		envPrepDataDir:              "custom-prep",
+		envPrepHFAPIKey:             "hf_test_key",
+		envPrepHFModel:              "intfloat/e5-large-v2",
+		envPrepHFBaseURL:            "http://127.0.0.1:8081/embed",
 	}
 	cfg, err := loadConfig("/tmp/t2o-data", func(key string) string {
 		return values[key]
@@ -57,6 +75,15 @@ func TestLoadConfigWithOverrides(t *testing.T) {
 	}
 	if cfg.DataDir != filepath.Join("/tmp/t2o-data", "custom-prep") {
 		t.Fatalf("unexpected prep data dir: %q", cfg.DataDir)
+	}
+	if cfg.HuggingFaceAPIKey != "hf_test_key" {
+		t.Fatalf("unexpected huggingface api key: %q", cfg.HuggingFaceAPIKey)
+	}
+	if cfg.EmbeddingModel != "intfloat/e5-large-v2" {
+		t.Fatalf("unexpected embedding model: %q", cfg.EmbeddingModel)
+	}
+	if cfg.HuggingFaceBaseURL != "http://127.0.0.1:8081/embed" {
+		t.Fatalf("unexpected huggingface base url: %q", cfg.HuggingFaceBaseURL)
 	}
 }
 

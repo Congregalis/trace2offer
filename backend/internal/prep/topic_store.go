@@ -17,6 +17,8 @@ var (
 	ErrPrepDisabled              = errors.New("prep module is disabled")
 	ErrTopicStoreUnavailable     = errors.New("prep topic store is unavailable")
 	ErrKnowledgeStoreUnavailable = errors.New("prep knowledge store is unavailable")
+	ErrEmbedProviderUnavailable  = errors.New("prep embedding provider is unavailable")
+	ErrIndexStoreUnavailable     = errors.New("prep index store is unavailable")
 	ErrTopicAlreadyExists        = errors.New("prep topic already exists")
 	ErrDocumentAlreadyExists     = errors.New("prep knowledge document already exists")
 )

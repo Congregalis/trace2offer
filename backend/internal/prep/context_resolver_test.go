@@ -27,18 +27,6 @@ func TestContextResolverResolveAggregatesSources(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("create topic doc: %v", err)
 	}
-	if _, err := service.CreateKnowledgeDocument("companies", "openai", KnowledgeDocumentCreateInput{
-		Filename: "culture",
-		Content:  "# OpenAI Culture",
-	}); err != nil {
-		t.Fatalf("create company doc: %v", err)
-	}
-	if _, err := service.CreateKnowledgeDocument("leads", "lead_ctx", KnowledgeDocumentCreateInput{
-		Filename: "notes",
-		Content:  "lead notes",
-	}); err != nil {
-		t.Fatalf("create lead doc: %v", err)
-	}
 
 	writeFileForContextTest(t, filepath.Join(dataRoot, "resume", "current.md"), "# Resume\n\nGo engineer")
 	writeUserProfileForContextTest(t, filepath.Join(dataRoot, "user_profile.json"), map[string]any{
@@ -67,14 +55,8 @@ func TestContextResolverResolveAggregatesSources(t *testing.T) {
 	if !contextSourceExists(preview.Sources, "lead", "jd_text", "JD 原文") {
 		t.Fatalf("expected jd source included, got %+v", preview.Sources)
 	}
-	if !contextSourceExists(preview.Sources, "company", "markdown", "openai/culture.md") {
-		t.Fatalf("expected company doc source included, got %+v", preview.Sources)
-	}
 	if !contextSourceExists(preview.Sources, "topic", "markdown", "rag/overview.md") {
 		t.Fatalf("expected topic doc source included, got %+v", preview.Sources)
-	}
-	if !contextSourceExists(preview.Sources, "lead", "markdown", "lead_ctx/notes.md") {
-		t.Fatalf("expected lead doc source included, got %+v", preview.Sources)
 	}
 }
 
@@ -130,31 +112,6 @@ func TestContextResolverResolveWithoutProfile(t *testing.T) {
 	}
 	if preview.HasProfile {
 		t.Fatalf("expected has_profile=false when user profile file missing")
-	}
-}
-
-func TestContextResolverResolveWithoutMatchingCompanyDocs(t *testing.T) {
-	t.Parallel()
-
-	service, _ := newPrepServiceForContextTest(t)
-	if _, err := service.CreateKnowledgeDocument("companies", "anthropic", KnowledgeDocumentCreateInput{
-		Filename: "notes",
-		Content:  "other company",
-	}); err != nil {
-		t.Fatalf("create company doc: %v", err)
-	}
-
-	preview, err := service.GetLeadContextPreview(model.Lead{
-		ID:       "lead_no_company_docs",
-		Company:  "OpenAI",
-		Position: "Agent Engineer",
-		JDText:   "JD content",
-	})
-	if err != nil {
-		t.Fatalf("get lead context preview: %v", err)
-	}
-	if contextSourceExistsByScope(preview.Sources, "company") {
-		t.Fatalf("expected no company sources for unmatched company slug, got %+v", preview.Sources)
 	}
 }
 

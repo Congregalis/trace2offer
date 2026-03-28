@@ -10,10 +10,14 @@ import (
 
 const (
 	defaultQuestionCount = 8
+	defaultHFModel       = "intfloat/multilingual-e5-small"
 
 	envPrepEnabled              = "T2O_PREP_ENABLED"
 	envPrepDataDir              = "T2O_PREP_DATA_DIR"
 	envPrepDefaultQuestionCount = "T2O_PREP_DEFAULT_QUESTION_COUNT"
+	envPrepHFAPIKey             = "T2O_PREP_HF_API_KEY"
+	envPrepHFModel              = "T2O_PREP_HF_MODEL"
+	envPrepHFBaseURL            = "T2O_PREP_HF_BASE_URL"
 )
 
 type Config struct {
@@ -21,6 +25,12 @@ type Config struct {
 	DataDir              string
 	DefaultQuestionCount int
 	SupportedScopes      []Scope
+	EmbeddingProvider    string
+	EmbeddingModel       string
+	EmbeddingDimension   int
+	HuggingFaceAPIKey    string
+	HuggingFaceBaseURL   string
+	IndexDBPath          string
 }
 
 func LoadConfig(dataRootDir string) (Config, error) {
@@ -61,12 +71,22 @@ func loadConfig(dataRootDir string, getenv func(string) string) (Config, error) 
 		dataDir = filepath.Join(root, dataDir)
 	}
 	dataDir = filepath.Clean(dataDir)
+	hfModel := strings.TrimSpace(getenv(envPrepHFModel))
+	if hfModel == "" {
+		hfModel = defaultHFModel
+	}
 
 	config := Config{
 		Enabled:              enabled,
 		DataDir:              dataDir,
 		DefaultQuestionCount: questionCount,
 		SupportedScopes:      DefaultSupportedScopes(),
+		EmbeddingProvider:    "huggingface",
+		EmbeddingModel:       hfModel,
+		EmbeddingDimension:   1024,
+		HuggingFaceAPIKey:    strings.TrimSpace(getenv(envPrepHFAPIKey)),
+		HuggingFaceBaseURL:   strings.TrimSpace(getenv(envPrepHFBaseURL)),
+		IndexDBPath:          filepath.Join(dataDir, "prep_index.sqlite"),
 	}
 	if err := config.Validate(); err != nil {
 		return Config{}, err
@@ -83,6 +103,18 @@ func (c Config) Validate() error {
 	}
 	if len(c.SupportedScopes) == 0 {
 		return fmt.Errorf("prep supported scopes are required")
+	}
+	if strings.TrimSpace(c.EmbeddingProvider) == "" {
+		return fmt.Errorf("prep embedding provider is required")
+	}
+	if strings.TrimSpace(c.EmbeddingModel) == "" {
+		return fmt.Errorf("prep embedding model is required")
+	}
+	if c.EmbeddingDimension <= 0 {
+		return fmt.Errorf("prep embedding dimension must be greater than 0")
+	}
+	if strings.TrimSpace(c.IndexDBPath) == "" {
+		return fmt.Errorf("prep index db path is required")
 	}
 	for _, scope := range c.SupportedScopes {
 		if !isSupportedScope(scope) {
