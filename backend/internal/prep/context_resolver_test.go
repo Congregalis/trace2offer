@@ -1,7 +1,6 @@
 package prep
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -29,9 +28,6 @@ func TestContextResolverResolveAggregatesSources(t *testing.T) {
 	}
 
 	writeFileForContextTest(t, filepath.Join(dataRoot, "resume", "current.md"), "# Resume\n\nGo engineer")
-	writeUserProfileForContextTest(t, filepath.Join(dataRoot, "user_profile.json"), map[string]any{
-		"name": "Alice",
-	})
 
 	preview, err := service.GetLeadContextPreview(model.Lead{
 		ID:       "lead_ctx",
@@ -45,9 +41,6 @@ func TestContextResolverResolveAggregatesSources(t *testing.T) {
 
 	if !preview.HasResume {
 		t.Fatalf("expected has_resume=true")
-	}
-	if !preview.HasProfile {
-		t.Fatalf("expected has_profile=true")
 	}
 	if len(preview.TopicKeys) != 1 || preview.TopicKeys[0] != "rag" {
 		t.Fatalf("expected topic_keys=[rag], got %+v", preview.TopicKeys)
@@ -97,24 +90,6 @@ func TestContextResolverResolveWithoutResume(t *testing.T) {
 	}
 }
 
-func TestContextResolverResolveWithoutProfile(t *testing.T) {
-	t.Parallel()
-
-	service, _ := newPrepServiceForContextTest(t)
-	preview, err := service.GetLeadContextPreview(model.Lead{
-		ID:       "lead_no_profile",
-		Company:  "OpenAI",
-		Position: "Agent Engineer",
-		JDText:   "JD content",
-	})
-	if err != nil {
-		t.Fatalf("get lead context preview: %v", err)
-	}
-	if preview.HasProfile {
-		t.Fatalf("expected has_profile=false when user profile file missing")
-	}
-}
-
 func TestContextResolverResolveWithEmptyTopics(t *testing.T) {
 	t.Parallel()
 
@@ -161,16 +136,6 @@ func writeFileForContextTest(t *testing.T, path string, content string) {
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("write %s: %v", path, err)
 	}
-}
-
-func writeUserProfileForContextTest(t *testing.T, path string, payload map[string]any) {
-	t.Helper()
-
-	body, err := json.Marshal(payload)
-	if err != nil {
-		t.Fatalf("marshal user profile payload: %v", err)
-	}
-	writeFileForContextTest(t, path, string(body))
 }
 
 func contextSourceExists(sources []ContextSource, scope string, kind string, title string) bool {

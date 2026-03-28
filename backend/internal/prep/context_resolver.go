@@ -1,7 +1,6 @@
 package prep
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -18,19 +17,17 @@ var ErrContextResolverUnavailable = errors.New("prep context resolver is unavail
 var companySlugPattern = regexp.MustCompile(`[^a-z0-9]+`)
 
 type ContextResolver struct {
-	topicStore      *TopicStore
-	knowledgeStore  *KnowledgeStore
-	resumePath      string
-	userProfilePath string
+	topicStore     *TopicStore
+	knowledgeStore *KnowledgeStore
+	resumePath     string
 }
 
 func NewContextResolver(prepDataDir string, topicStore *TopicStore, knowledgeStore *KnowledgeStore) *ContextResolver {
 	rootDir := filepath.Dir(filepath.Clean(strings.TrimSpace(prepDataDir)))
 	return &ContextResolver{
-		topicStore:      topicStore,
-		knowledgeStore:  knowledgeStore,
-		resumePath:      filepath.Join(rootDir, "resume", "current.md"),
-		userProfilePath: filepath.Join(rootDir, "user_profile.json"),
+		topicStore:     topicStore,
+		knowledgeStore: knowledgeStore,
+		resumePath:     filepath.Join(rootDir, "resume", "current.md"),
 	}
 }
 
@@ -58,12 +55,6 @@ func (r *ContextResolver) Resolve(lead model.Lead) (LeadContextPreview, error) {
 	}
 	preview.HasResume = hasResume
 
-	hasProfile, err := r.hasProfile()
-	if err != nil {
-		return LeadContextPreview{}, err
-	}
-	preview.HasProfile = hasProfile
-
 	topics := r.topicStore.List()
 	preview.TopicKeys = topicKeysFromTopics(topics)
 
@@ -79,13 +70,6 @@ func (r *ContextResolver) Resolve(lead model.Lead) (LeadContextPreview, error) {
 			Scope: "resume",
 			Kind:  "markdown",
 			Title: "resume/current.md",
-		})
-	}
-	if preview.HasProfile {
-		preview.Sources = append(preview.Sources, ContextSource{
-			Scope: "profile",
-			Kind:  "json",
-			Title: "user_profile.json",
 		})
 	}
 
@@ -146,37 +130,6 @@ func (r *ContextResolver) hasResume() (bool, error) {
 	return strings.TrimSpace(string(content)) != "", nil
 }
 
-func (r *ContextResolver) hasProfile() (bool, error) {
-	if strings.TrimSpace(r.userProfilePath) == "" {
-		return false, nil
-	}
-	payload, err := os.ReadFile(r.userProfilePath)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return false, nil
-		}
-		return false, fmt.Errorf("read prep user profile: %w", err)
-	}
-	if strings.TrimSpace(string(payload)) == "" {
-		return false, nil
-	}
-
-	var data map[string]any
-	if err := json.Unmarshal(payload, &data); err != nil {
-		return false, fmt.Errorf("decode prep user profile: %w", err)
-	}
-	for key, value := range data {
-		normalizedKey := strings.ToLower(strings.TrimSpace(key))
-		if normalizedKey == "updated_at" || normalizedKey == "updatedat" {
-			continue
-		}
-		if jsonValueHasContent(value) {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
 func topicKeysFromTopics(topics []Topic) []string {
 	if len(topics) == 0 {
 		return []string{}
@@ -213,9 +166,6 @@ func (r *ContextResolver) BuildPromptCandidateProfile(lead model.Lead) string {
 	if resumeText, ok := r.readResumeText(); ok {
 		sections = append(sections, "Resume:\n"+resumeText)
 	}
-	if profileText, ok := r.readProfileText(); ok {
-		sections = append(sections, "User Profile:\n"+profileText)
-	}
 	return strings.TrimSpace(strings.Join(sections, "\n\n"))
 }
 
@@ -224,18 +174,6 @@ func (r *ContextResolver) readResumeText() (string, bool) {
 		return "", false
 	}
 	content, err := os.ReadFile(r.resumePath)
-	if err != nil {
-		return "", false
-	}
-	trimmed := strings.TrimSpace(string(content))
-	return trimmed, trimmed != ""
-}
-
-func (r *ContextResolver) readProfileText() (string, bool) {
-	if r == nil {
-		return "", false
-	}
-	content, err := os.ReadFile(r.userProfilePath)
 	if err != nil {
 		return "", false
 	}
@@ -262,31 +200,4 @@ func buildLeadSummaryForPrompt(lead model.Lead) string {
 		lines = append(lines, fmt.Sprintf("- Notes: %s", notes))
 	}
 	return strings.TrimSpace(strings.Join(lines, "\n"))
-}
-
-func jsonValueHasContent(value any) bool {
-	switch typed := value.(type) {
-	case string:
-		return strings.TrimSpace(typed) != ""
-	case float64:
-		return typed > 0
-	case bool:
-		return typed
-	case []any:
-		for _, item := range typed {
-			if jsonValueHasContent(item) {
-				return true
-			}
-		}
-		return false
-	case map[string]any:
-		for _, item := range typed {
-			if jsonValueHasContent(item) {
-				return true
-			}
-		}
-		return false
-	default:
-		return false
-	}
 }

@@ -124,7 +124,6 @@ func (e *RetrievalEngine) Search(query string, config SearchConfig) (*SearchResu
 					"lead_id":              normalized.LeadID,
 					"company_slug":         normalized.CompanySlug,
 					"include_resume":       normalized.IncludeResume,
-					"include_profile":      normalized.IncludeProfile,
 					"include_lead_docs":    normalized.IncludeLeadDocs,
 					"scope_topic_filtered": true,
 				},
@@ -157,7 +156,6 @@ type normalizedSearchConfig struct {
 	TopK            int
 	IncludeTrace    bool
 	IncludeResume   bool
-	IncludeProfile  bool
 	IncludeLeadDocs bool
 }
 
@@ -191,7 +189,6 @@ func normalizeSearchConfig(query string, config SearchConfig) (normalizedSearchC
 		TopK:            topK,
 		IncludeTrace:    config.IncludeTrace,
 		IncludeResume:   config.IncludeResume,
-		IncludeProfile:  config.IncludeProfile,
 		IncludeLeadDocs: config.IncludeLeadDocs,
 	}, nil
 }

@@ -113,20 +113,18 @@ type ContextSource struct {
 }
 
 type LeadContextPreview struct {
-	LeadID     string          `json:"lead_id"`
-	Company    string          `json:"company"`
-	Position   string          `json:"position"`
-	HasResume  bool            `json:"has_resume"`
-	HasProfile bool            `json:"has_profile"`
-	TopicKeys  []string        `json:"topic_keys"`
-	Sources    []ContextSource `json:"sources"`
+	LeadID    string          `json:"lead_id"`
+	Company   string          `json:"company"`
+	Position  string          `json:"position"`
+	HasResume bool            `json:"has_resume"`
+	TopicKeys []string        `json:"topic_keys"`
+	Sources   []ContextSource `json:"sources"`
 }
 
 type SessionConfig struct {
 	TopicKeys       []string `json:"topic_keys"`
 	QuestionCount   int      `json:"question_count"`
 	IncludeResume   bool     `json:"include_resume"`
-	IncludeProfile  bool     `json:"include_profile"`
 	IncludeLeadDocs bool     `json:"include_lead_docs"`
 }
 
@@ -135,7 +133,6 @@ type CreateSessionInput struct {
 	TopicKeys       []string `json:"topic_keys"`
 	QuestionCount   int      `json:"question_count"`
 	IncludeResume   bool     `json:"include_resume"`
-	IncludeProfile  bool     `json:"include_profile"`
 	IncludeLeadDocs bool     `json:"include_lead_docs"`
 }
 
@@ -146,7 +143,6 @@ type GenerationConfig struct {
 	TopicKeys       []string `json:"topic_keys"`
 	QuestionCount   int      `json:"question_count"`
 	IncludeResume   bool     `json:"include_resume"`
-	IncludeProfile  bool     `json:"include_profile"`
 	IncludeLeadDocs bool     `json:"include_lead_docs"`
 }
 
@@ -323,7 +319,6 @@ type SearchConfig struct {
 	TopK            int      `json:"top_k"`
 	IncludeTrace    bool     `json:"include_trace"`
 	IncludeResume   bool     `json:"include_resume"`
-	IncludeProfile  bool     `json:"include_profile"`
 	IncludeLeadDocs bool     `json:"include_lead_docs"`
 }
 

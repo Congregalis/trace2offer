@@ -26,7 +26,6 @@ export function PrepContextPreviewCard({ preview, isLoading = false, error = nul
             <Badge variant="secondary">{preview.company || "-"}</Badge>
             <Badge variant="outline">{preview.position || "-"}</Badge>
             <Badge variant={preview.hasResume ? "secondary" : "outline"}>{preview.hasResume ? "简历已就绪" : "无简历"}</Badge>
-            <Badge variant={preview.hasProfile ? "secondary" : "outline"}>{preview.hasProfile ? "画像已就绪" : "无画像"}</Badge>
           </div>
         ) : (
           <p className="text-sm text-muted-foreground">选择线索后展示可用上下文。</p>

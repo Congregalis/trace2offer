@@ -8,7 +8,6 @@ export interface PrepGenerationConfig {
   topicKeys: string[];
   questionCount: number;
   includeResume: boolean;
-  includeProfile: boolean;
   includeLeadDocs: boolean;
 }
 
@@ -101,7 +100,7 @@ export function PrepConfigPanel({
           </div>
         </div>
 
-        <div className="grid gap-2 sm:grid-cols-3">
+        <div className="grid gap-2 sm:grid-cols-2">
           <div className="flex items-center gap-2 text-sm">
             <Checkbox
               checked={config.includeResume}
@@ -109,14 +108,6 @@ export function PrepConfigPanel({
               disabled={disabled || isGenerating}
             />
             <span>包含简历</span>
-          </div>
-          <div className="flex items-center gap-2 text-sm">
-            <Checkbox
-              checked={config.includeProfile}
-              onCheckedChange={(value) => onChange({ ...config, includeProfile: Boolean(value) })}
-              disabled={disabled || isGenerating}
-            />
-            <span>包含画像</span>
           </div>
           <div className="flex items-center gap-2 text-sm">
             <Checkbox

@@ -324,9 +324,6 @@ func TestLeadAndChatAPI(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(tmpDir, "resume", "current.md"), []byte("# Resume\n\nGo backend engineer"), 0o644); err != nil {
 		t.Fatalf("write resume current.md: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(tmpDir, "user_profile.json"), []byte(`{"name":"Alice","core_skills":["Go"]}`), 0o644); err != nil {
-		t.Fatalf("write user_profile.json: %v", err)
-	}
 
 	resp = doJSONRequest(t, router, http.MethodGet, "/api/prep/leads/"+leadID+"/context-preview", nil)
 	if resp.Code != http.StatusOK {
@@ -341,9 +338,6 @@ func TestLeadAndChatAPI(t *testing.T) {
 	}
 	if !contextPreviewPayload.Data.HasResume {
 		t.Fatal("expected context has_resume=true")
-	}
-	if !contextPreviewPayload.Data.HasProfile {
-		t.Fatal("expected context has_profile=true")
 	}
 	if len(contextPreviewPayload.Data.TopicKeys) == 0 {
 		t.Fatal("expected context topic_keys not empty")
@@ -377,7 +371,6 @@ func TestLeadAndChatAPI(t *testing.T) {
 		"topic_keys":        []string{"rag"},
 		"question_count":    2,
 		"include_resume":    true,
-		"include_profile":   true,
 		"include_lead_docs": true,
 	})
 	if resp.Code != http.StatusCreated {
@@ -1075,7 +1068,6 @@ func TestPrepEndpointsReturnConfigErrorWhenHFUnavailable(t *testing.T) {
 		"query":             "RAG",
 		"topic_keys":        []string{"rag"},
 		"include_resume":    true,
-		"include_profile":   true,
 		"include_lead_docs": true,
 	})
 	assertConfigError(resp, "/api/prep/retrieval/preview")
@@ -1085,7 +1077,6 @@ func TestPrepEndpointsReturnConfigErrorWhenHFUnavailable(t *testing.T) {
 		"topic_keys":        []string{"rag"},
 		"question_count":    1,
 		"include_resume":    true,
-		"include_profile":   true,
 		"include_lead_docs": true,
 	})
 	assertConfigError(resp, "/api/prep/sessions")

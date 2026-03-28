@@ -43,7 +43,6 @@ export function PrepWorkspace() {
     topicKeys: [],
     questionCount: DEFAULT_PREP_META.defaultQuestionCount,
     includeResume: true,
-    includeProfile: true,
     includeLeadDocs: true,
   });
 
@@ -156,7 +155,6 @@ export function PrepWorkspace() {
       topicKeys: config.topicKeys,
       questionCount: config.questionCount,
       includeResume: config.includeResume,
-      includeProfile: config.includeProfile,
       includeLeadDocs: config.includeLeadDocs,
     }, {
       onStage: (event) => {

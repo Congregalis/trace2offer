@@ -389,7 +389,6 @@ func (s *Service) CreateSession(ctx context.Context, lead model.Lead, input Crea
 		TopicKeys:       input.TopicKeys,
 		QuestionCount:   input.QuestionCount,
 		IncludeResume:   input.IncludeResume,
-		IncludeProfile:  input.IncludeProfile,
 		IncludeLeadDocs: input.IncludeLeadDocs,
 	})
 	if err != nil {
@@ -440,7 +439,6 @@ func (s *Service) CreateSessionWithProgress(
 		TopicKeys:       input.TopicKeys,
 		QuestionCount:   input.QuestionCount,
 		IncludeResume:   input.IncludeResume,
-		IncludeProfile:  input.IncludeProfile,
 		IncludeLeadDocs: input.IncludeLeadDocs,
 	}, reporter)
 	if err != nil {
@@ -487,7 +485,6 @@ func (s *Service) GenerateQuestions(ctx context.Context, lead model.Lead, input 
 		TopicKeys:       input.TopicKeys,
 		QuestionCount:   input.QuestionCount,
 		IncludeResume:   input.IncludeResume,
-		IncludeProfile:  input.IncludeProfile,
 		IncludeLeadDocs: input.IncludeLeadDocs,
 	})
 	if err != nil {

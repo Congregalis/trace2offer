@@ -79,9 +79,6 @@ func TestQuestionGeneratorGenerateBuildsTraceAndSession(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(tmpDir, "resume", "current.md"), []byte("Go backend engineer"), 0o644); err != nil {
 		t.Fatalf("write resume: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(tmpDir, "user_profile.json"), []byte(`{"core_skills":["Go","RAG"]}`), 0o644); err != nil {
-		t.Fatalf("write profile: %v", err)
-	}
 
 	topicStore, err := NewTopicStore(filepath.Join(prepDir, "topic_catalog.json"))
 	if err != nil {
@@ -120,7 +117,6 @@ func TestQuestionGeneratorGenerateBuildsTraceAndSession(t *testing.T) {
 		TopicKeys:       []string{"rag"},
 		QuestionCount:   2,
 		IncludeResume:   true,
-		IncludeProfile:  true,
 		IncludeLeadDocs: true,
 	})
 	if err != nil {
@@ -158,8 +154,11 @@ func TestQuestionGeneratorGenerateBuildsTraceAndSession(t *testing.T) {
 	if !strings.Contains(modelStub.lastUserPrompt, "Resume:") {
 		t.Fatalf("expected prompt contains Resume section, got: %s", modelStub.lastUserPrompt)
 	}
-	if !strings.Contains(modelStub.lastUserPrompt, "User Profile:") {
-		t.Fatalf("expected prompt contains User Profile section, got: %s", modelStub.lastUserPrompt)
+	if !strings.Contains(modelStub.lastUserPrompt, "<candidate_context>") {
+		t.Fatalf("expected prompt contains candidate_context section, got: %s", modelStub.lastUserPrompt)
+	}
+	if strings.Contains(modelStub.lastUserPrompt, "User Profile:") {
+		t.Fatalf("expected prompt not contains User Profile section, got: %s", modelStub.lastUserPrompt)
 	}
 	if !strings.Contains(modelStub.lastUserPrompt, "Lead Summary:") {
 		t.Fatalf("expected prompt contains Lead Summary section, got: %s", modelStub.lastUserPrompt)
@@ -186,7 +185,6 @@ func TestQuestionGeneratorUsesStreamingModelWhenAvailable(t *testing.T) {
 		TopicKeys:       []string{"streaming"},
 		QuestionCount:   1,
 		IncludeResume:   true,
-		IncludeProfile:  true,
 		IncludeLeadDocs: true,
 	})
 	if err != nil {

@@ -66,7 +66,6 @@ interface APIPrepLeadContextPreview {
   company?: string;
   position?: string;
   has_resume?: boolean;
-  has_profile?: boolean;
   topic_keys?: string[];
   sources?: APIPrepContextSource[];
 }
@@ -186,7 +185,6 @@ interface APIPrepSession {
     topic_keys?: string[];
     question_count?: number;
     include_resume?: boolean;
-    include_profile?: boolean;
     include_lead_docs?: boolean;
   };
   sources?: APIPrepContextSource[];
@@ -336,7 +334,6 @@ function normalizeContextPreview(raw: APIPrepLeadContextPreview | undefined): Pr
     company: (raw?.company || "").trim(),
     position: (raw?.position || "").trim(),
     hasResume: Boolean(raw?.has_resume),
-    hasProfile: Boolean(raw?.has_profile),
     topicKeys,
     sources,
   };
@@ -596,7 +593,6 @@ function normalizeSession(raw: APIPrepSession | undefined): PrepSession {
           ? Math.max(0, Math.floor(raw.config.question_count))
           : 0,
       includeResume: Boolean(raw?.config?.include_resume),
-      includeProfile: Boolean(raw?.config?.include_profile),
       includeLeadDocs: Boolean(raw?.config?.include_lead_docs),
     },
     sources,
@@ -898,7 +894,6 @@ export async function previewPrepRetrieval(input: PrepRetrievalPreviewRequest, s
       top_k: typeof input.topK === "number" && Number.isFinite(input.topK) ? Math.max(1, Math.floor(input.topK)) : undefined,
       include_trace: typeof input.includeTrace === "boolean" ? input.includeTrace : true,
       include_resume: typeof input.includeResume === "boolean" ? input.includeResume : true,
-      include_profile: typeof input.includeProfile === "boolean" ? input.includeProfile : true,
       include_lead_docs: typeof input.includeLeadDocs === "boolean" ? input.includeLeadDocs : true,
     }),
     signal,
@@ -949,7 +944,6 @@ export async function createPrepSession(input: PrepCreateSessionInput): Promise<
           ? Math.max(1, Math.floor(input.questionCount))
           : DEFAULT_PREP_META.defaultQuestionCount,
       include_resume: Boolean(input.includeResume),
-      include_profile: Boolean(input.includeProfile),
       include_lead_docs: Boolean(input.includeLeadDocs),
     }),
   });
@@ -988,7 +982,6 @@ export async function createPrepSessionStream(
           ? Math.max(1, Math.floor(input.questionCount))
           : DEFAULT_PREP_META.defaultQuestionCount,
       include_resume: Boolean(input.includeResume),
-      include_profile: Boolean(input.includeProfile),
       include_lead_docs: Boolean(input.includeLeadDocs),
     }),
   });

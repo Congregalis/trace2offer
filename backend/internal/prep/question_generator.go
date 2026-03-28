@@ -14,7 +14,16 @@ import (
 
 var ErrQuestionGeneratorUnavailable = fmt.Errorf("prep question generator is unavailable")
 
-const retrievalQueryPlannerSystemPrompt = "You are a retrieval query planning agent for interview preparation."
+const retrievalQueryPlannerSystemPrompt = `You are the retrieval-query planner for Trace2Offer interview prep.
+
+Goal:
+- Produce one high-recall, high-precision query for searching interview-prep knowledge chunks.
+
+Hard rules:
+1) Prioritize job-critical skills from JD and candidate-specific strengths from resume.
+2) Include topic keys when they are relevant; avoid stuffing unrelated keywords.
+3) Keep query concise (roughly <= 20 terms), information-dense, and search-friendly.
+4) Output JSON only: {"query":"..."}`
 
 type QuestionModel interface {
 	Name() string
@@ -201,7 +210,6 @@ func (g *QuestionGenerator) GenerateFromInput(ctx context.Context, lead model.Le
 		TopicKeys:       input.TopicKeys,
 		QuestionCount:   input.QuestionCount,
 		IncludeResume:   input.IncludeResume,
-		IncludeProfile:  input.IncludeProfile,
 		IncludeLeadDocs: input.IncludeLeadDocs,
 	})
 	if err != nil {
@@ -332,7 +340,6 @@ func (g *QuestionGenerator) GenerateWithProgress(
 			TopK:            questionCount,
 			IncludeTrace:    true,
 			IncludeResume:   config.IncludeResume,
-			IncludeProfile:  config.IncludeProfile,
 			IncludeLeadDocs: config.IncludeLeadDocs,
 		}
 		result, err := g.retrieval.Search(retrievalQuery, searchInput)
@@ -378,7 +385,7 @@ func (g *QuestionGenerator) GenerateWithProgress(
 	trace.PromptSections = []PromptSection{
 		{Title: "system", Content: promptSections.System},
 		{Title: "context", Content: promptSections.Context},
-		{Title: "candidate_profile", Content: promptSections.CandidateProfile},
+		{Title: "candidate_context", Content: promptSections.CandidateProfile},
 		{Title: "job_description", Content: promptSections.JobDescription},
 		{Title: "task", Content: promptSections.Task},
 		{Title: "requirements", Content: promptSections.Requirements},
@@ -491,7 +498,6 @@ func (g *QuestionGenerator) GenerateWithProgress(
 			TopicKeys:       topicKeys,
 			QuestionCount:   questionCount,
 			IncludeResume:   config.IncludeResume,
-			IncludeProfile:  config.IncludeProfile,
 			IncludeLeadDocs: config.IncludeLeadDocs,
 		},
 		Sources:          sources,
@@ -686,19 +692,31 @@ func (g *QuestionGenerator) planRetrievalQuery(
 
 func buildRetrievalQueryPlannerPrompt(lead model.Lead, topicKeys []string, resumeText string, jdText string) string {
 	return strings.Join([]string{
-		"Create one concise retrieval query for interview prep knowledge search.",
-		"The query should maximize relevance to the candidate background and job requirements.",
+		"<query_task>",
+		"Create one retrieval query for interview question generation.",
 		"Return JSON only: {\"query\":\"...\"}.",
+		"</query_task>",
 		"",
-		fmt.Sprintf("Company: %s", strings.TrimSpace(lead.Company)),
-		fmt.Sprintf("Position: %s", strings.TrimSpace(lead.Position)),
-		fmt.Sprintf("Topic Keys: %s", strings.Join(topicKeys, ", ")),
+		"<lead>",
+		fmt.Sprintf("company: %s", strings.TrimSpace(lead.Company)),
+		fmt.Sprintf("position: %s", strings.TrimSpace(lead.Position)),
+		fmt.Sprintf("topic_keys: %s", strings.Join(topicKeys, ", ")),
+		"</lead>",
 		"",
-		"Resume:",
-		limitPromptInput(resumeText, 4000),
+		"<resume>",
+		limitPromptInput(resumeText, 3200),
+		"</resume>",
 		"",
-		"Job Description:",
-		limitPromptInput(jdText, 4000),
+		"<job_description>",
+		limitPromptInput(jdText, 3200),
+		"</job_description>",
+		"",
+		"<query_quality_checklist>",
+		"- should include role/domain signal (e.g. backend, distributed systems, llm, rag).",
+		"- should include at least one JD-critical keyword if JD exists.",
+		"- should include at least one candidate-skill keyword if resume exists.",
+		"- avoid punctuation-heavy natural language sentences; prefer keyword-style query.",
+		"</query_quality_checklist>",
 	}, "\n")
 }
 

@@ -70,6 +70,7 @@ export function PrepRunTimeline({ trace, stageStatus, stageOutput, isStreaming =
     [
       promptByTitle.get("system") || "",
       promptByTitle.get("context") || "",
+      promptByTitle.get("candidate_context") || "",
       promptByTitle.get("candidate_profile") || "",
       promptByTitle.get("job_description") || "",
       promptByTitle.get("task") || "",

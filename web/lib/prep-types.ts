@@ -53,7 +53,6 @@ export interface PrepLeadContextPreview {
   company: string;
   position: string;
   hasResume: boolean;
-  hasProfile: boolean;
   topicKeys: string[];
   sources: PrepContextSource[];
 }
@@ -123,7 +122,6 @@ export interface PrepRetrievalPreviewRequest {
   topK?: number;
   includeTrace?: boolean;
   includeResume?: boolean;
-  includeProfile?: boolean;
   includeLeadDocs?: boolean;
 }
 
@@ -195,7 +193,6 @@ export interface PrepSessionConfig {
   topicKeys: string[];
   questionCount: number;
   includeResume: boolean;
-  includeProfile: boolean;
   includeLeadDocs: boolean;
 }
 
@@ -269,7 +266,6 @@ export interface PrepCreateSessionInput {
   topicKeys: string[];
   questionCount: number;
   includeResume: boolean;
-  includeProfile: boolean;
   includeLeadDocs: boolean;
 }
 

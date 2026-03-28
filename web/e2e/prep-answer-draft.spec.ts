@@ -46,7 +46,6 @@ test("auto-saves prep answers and restores after refresh", async ({ page }) => {
           company: "OpenAI",
           position: "Agent Engineer",
           has_resume: true,
-          has_profile: true,
           topic_keys: ["rag"],
           sources: [],
         },
@@ -54,17 +53,19 @@ test("auto-saves prep answers and restores after refresh", async ({ page }) => {
     });
   });
 
-  await page.route("**/api/prep/sessions", async (route: Route, request: Request) => {
+  await page.route("**/api/prep/sessions/stream", async (route: Route, request: Request) => {
     if (request.method() !== "POST") {
       await route.continue();
       return;
     }
 
-    await route.fulfill({
-      status: 201,
-      contentType: "application/json",
-      body: JSON.stringify({
-        data: {
+    const streamBody = [
+      "event: started",
+      'data: {"lead_id":"lead_test"}',
+      "",
+      "event: completed",
+      `data: ${JSON.stringify({
+        session: {
           id: "prep_01",
           lead_id: "lead_test",
           company: "OpenAI",
@@ -74,7 +75,6 @@ test("auto-saves prep answers and restores after refresh", async ({ page }) => {
             topic_keys: ["rag"],
             question_count: 2,
             include_resume: true,
-            include_profile: true,
             include_lead_docs: true,
           },
           sources: [],
@@ -87,7 +87,15 @@ test("auto-saves prep answers and restores after refresh", async ({ page }) => {
           created_at: "2026-03-27T10:00:00Z",
           updated_at: savedAt,
         },
-      }),
+      })}`,
+      "",
+      "",
+    ].join("\n");
+
+    await route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body: streamBody,
     });
   });
 
@@ -111,7 +119,6 @@ test("auto-saves prep answers and restores after refresh", async ({ page }) => {
             topic_keys: ["rag"],
             question_count: 2,
             include_resume: true,
-            include_profile: true,
             include_lead_docs: true,
           },
           sources: [],
