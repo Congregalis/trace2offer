@@ -205,6 +205,15 @@ export interface PrepGenerationTrace {
     topicKeys: string[];
     questionCount: number;
   };
+  queryPlanning: {
+    strategy: string;
+    model: string;
+    resumeExcerpt: string;
+    jdExcerpt: string;
+    prompt: string;
+    rawOutput: string;
+    finalQuery: string;
+  };
   retrievalQuery: string;
   retrievalResults: {
     candidatesFound: number;
@@ -219,11 +228,23 @@ export interface PrepGenerationTrace {
     contextSection?: string;
     taskInstruction?: string;
   };
+  assembledPrompt: string;
   generationResult: {
     questionsGenerated: number;
     generationTimeMs: number;
     model: string;
   };
+}
+
+export type PrepGenerationStage = "input_snapshot" | "query_planning" | "retrieval" | "prompt_assembly" | "generation";
+export type PrepGenerationProgressStatus = "started" | "progress" | "completed";
+
+export interface PrepGenerationProgressEvent {
+  stage: PrepGenerationStage | string;
+  status: PrepGenerationProgressStatus | string;
+  message?: string;
+  delta?: string;
+  trace?: PrepGenerationTrace;
 }
 
 export interface PrepSession {

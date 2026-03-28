@@ -26,6 +26,29 @@ func (m *stubQuestionModel) Generate(_ context.Context, systemPrompt string, use
 	return m.output, nil
 }
 
+type stubStreamingQuestionModel struct {
+	chunks []string
+	calls  int
+}
+
+func (m *stubStreamingQuestionModel) Name() string {
+	return "stub-stream-model"
+}
+
+func (m *stubStreamingQuestionModel) Generate(_ context.Context, _ string, _ string) (string, error) {
+	return strings.Join(m.chunks, ""), nil
+}
+
+func (m *stubStreamingQuestionModel) GenerateStream(_ context.Context, _ string, _ string, onDelta func(string)) (string, error) {
+	m.calls++
+	for _, chunk := range m.chunks {
+		if onDelta != nil {
+			onDelta(chunk)
+		}
+	}
+	return strings.Join(m.chunks, ""), nil
+}
+
 func TestParseGeneratedQuestionsFallbackOnMalformedJSON(t *testing.T) {
 	t.Parallel()
 
@@ -120,6 +143,15 @@ func TestQuestionGeneratorGenerateBuildsTraceAndSession(t *testing.T) {
 	if session.GenerationTrace.RetrievalQuery == "" {
 		t.Fatal("expected retrieval query in trace")
 	}
+	if session.GenerationTrace.QueryPlanning.FinalQuery == "" {
+		t.Fatal("expected query planning final query in trace")
+	}
+	if session.GenerationTrace.QueryPlanning.Prompt == "" {
+		t.Fatal("expected query planning prompt in trace")
+	}
+	if session.GenerationTrace.AssembledPrompt == "" {
+		t.Fatal("expected assembled prompt in trace")
+	}
 	if session.GenerationTrace.GenerationResult.Model != "stub-model" {
 		t.Fatalf("expected model trace stub-model, got %q", session.GenerationTrace.GenerationResult.Model)
 	}
@@ -131,5 +163,42 @@ func TestQuestionGeneratorGenerateBuildsTraceAndSession(t *testing.T) {
 	}
 	if !strings.Contains(modelStub.lastUserPrompt, "Lead Summary:") {
 		t.Fatalf("expected prompt contains Lead Summary section, got: %s", modelStub.lastUserPrompt)
+	}
+}
+
+func TestQuestionGeneratorUsesStreamingModelWhenAvailable(t *testing.T) {
+	t.Parallel()
+
+	modelStub := &stubStreamingQuestionModel{
+		chunks: []string{
+			`{"questions":[{"id":1,"type":"technical","content":"Explain streaming","expected_points":["delta"],"context_sources":["src.md"]}]}`,
+		},
+	}
+	generator := NewQuestionGenerator(nil, nil, nil, nil, modelStub, 1)
+	generated, err := generator.GenerateWithContext(context.Background(), GenerationConfig{
+		Lead: model.Lead{
+			ID:       "lead_stream",
+			Company:  "OpenAI",
+			Position: "Backend Engineer",
+			JDText:   "Build streaming APIs",
+		},
+		LeadID:          "lead_stream",
+		TopicKeys:       []string{"streaming"},
+		QuestionCount:   1,
+		IncludeResume:   true,
+		IncludeProfile:  true,
+		IncludeLeadDocs: true,
+	})
+	if err != nil {
+		t.Fatalf("generate session: %v", err)
+	}
+	if generated == nil || generated.Session == nil {
+		t.Fatal("expected generated session")
+	}
+	if modelStub.calls == 0 {
+		t.Fatal("expected streaming generate to be called")
+	}
+	if len(generated.Session.Questions) != 1 {
+		t.Fatalf("expected 1 question, got %d", len(generated.Session.Questions))
 	}
 }

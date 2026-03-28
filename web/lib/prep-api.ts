@@ -14,6 +14,8 @@ import {
   PrepKnowledgeDocumentUpdateInput,
   PrepDraftAnswersSaveResult,
   PrepAnswer,
+  PrepGenerationProgressEvent,
+  PrepGenerationTrace,
   PrepLeadContextPreview,
   PrepMeta,
   PrepQuestion,
@@ -198,6 +200,15 @@ interface APIPrepSession {
       topic_keys?: string[];
       question_count?: number;
     };
+    query_planning?: {
+      strategy?: string;
+      model?: string;
+      resume_excerpt?: string;
+      jd_excerpt?: string;
+      prompt?: string;
+      raw_output?: string;
+      final_query?: string;
+    };
     retrieval_query?: string;
     retrieval_results?: {
       candidates_found?: number;
@@ -208,6 +219,7 @@ interface APIPrepSession {
       title?: string;
       content?: string;
     }>;
+    assembled_prompt?: string;
     generation_result?: {
       questions_generated?: number;
       generation_time_ms?: number;
@@ -235,6 +247,14 @@ interface APISinglePayload<T> {
 interface APIErrorPayload {
   message?: string;
   error?: string;
+}
+
+interface APIPrepStreamStageEvent {
+  stage?: string;
+  status?: string;
+  message?: string;
+  delta?: string;
+  trace?: APIPrepSession["generation_trace"];
 }
 
 function getAPIURL(path: string): string {
@@ -485,6 +505,71 @@ function normalizeAnswer(raw: APIPrepAnswer): PrepAnswer {
   };
 }
 
+function normalizeGenerationTrace(raw: APIPrepSession["generation_trace"] | undefined): PrepGenerationTrace | undefined {
+  if (!raw) {
+    return undefined;
+  }
+
+  const traceSourceTitles = Array.isArray(raw?.retrieval_results?.sources)
+    ? raw.retrieval_results.sources.map((item) => (item || "").trim()).filter((item) => item.length > 0)
+    : [];
+  const promptSections = Array.isArray(raw?.prompt_sections)
+    ? raw.prompt_sections
+        .map((section) => ({
+          title: (section?.title || "").trim(),
+          content: (section?.content || "").trim(),
+        }))
+        .filter((section) => section.title.length > 0 || section.content.length > 0)
+    : [];
+
+  return {
+    inputSnapshot: {
+      leadId: (raw?.input_snapshot?.lead_id || "").trim(),
+      topicKeys: Array.isArray(raw?.input_snapshot?.topic_keys)
+        ? raw.input_snapshot.topic_keys.map((item) => (item || "").trim()).filter((item) => item.length > 0)
+        : [],
+      questionCount:
+        typeof raw?.input_snapshot?.question_count === "number" && Number.isFinite(raw.input_snapshot.question_count)
+          ? Math.max(0, Math.floor(raw.input_snapshot.question_count))
+          : 0,
+    },
+    queryPlanning: {
+      strategy: (raw?.query_planning?.strategy || "").trim(),
+      model: (raw?.query_planning?.model || "").trim(),
+      resumeExcerpt: (raw?.query_planning?.resume_excerpt || "").trim(),
+      jdExcerpt: (raw?.query_planning?.jd_excerpt || "").trim(),
+      prompt: raw?.query_planning?.prompt || "",
+      rawOutput: raw?.query_planning?.raw_output || "",
+      finalQuery: (raw?.query_planning?.final_query || "").trim(),
+    },
+    retrievalQuery: (raw?.retrieval_query || "").trim(),
+    retrievalResults: {
+      candidatesFound:
+        typeof raw?.retrieval_results?.candidates_found === "number" && Number.isFinite(raw.retrieval_results.candidates_found)
+          ? Math.max(0, Math.floor(raw.retrieval_results.candidates_found))
+          : 0,
+      finalSelected:
+        typeof raw?.retrieval_results?.final_selected === "number" && Number.isFinite(raw.retrieval_results.final_selected)
+          ? Math.max(0, Math.floor(raw.retrieval_results.final_selected))
+          : 0,
+      sources: traceSourceTitles,
+    },
+    promptSections,
+    assembledPrompt: raw?.assembled_prompt || "",
+    generationResult: {
+      questionsGenerated:
+        typeof raw?.generation_result?.questions_generated === "number" && Number.isFinite(raw.generation_result.questions_generated)
+          ? Math.max(0, Math.floor(raw.generation_result.questions_generated))
+          : 0,
+      generationTimeMs:
+        typeof raw?.generation_result?.generation_time_ms === "number" && Number.isFinite(raw.generation_result.generation_time_ms)
+          ? Math.max(0, Math.floor(raw.generation_result.generation_time_ms))
+          : 0,
+      model: (raw?.generation_result?.model || "").trim(),
+    },
+  };
+}
+
 function normalizeSession(raw: APIPrepSession | undefined): PrepSession {
   const questions = Array.isArray(raw?.questions)
     ? raw.questions.map(normalizeQuestion).filter((item) => item.id > 0)
@@ -496,62 +581,7 @@ function normalizeSession(raw: APIPrepSession | undefined): PrepSession {
   const topicKeys = Array.isArray(raw?.config?.topic_keys)
     ? raw.config.topic_keys.map((item) => (item || "").trim()).filter((item) => item.length > 0)
     : [];
-  const traceSourceTitles = Array.isArray(raw?.generation_trace?.retrieval_results?.sources)
-    ? raw.generation_trace?.retrieval_results?.sources?.map((item) => (item || "").trim()).filter((item) => item.length > 0)
-    : [];
-  const promptSections = Array.isArray(raw?.generation_trace?.prompt_sections)
-    ? raw.generation_trace.prompt_sections
-        .map((section) => ({
-          title: (section?.title || "").trim(),
-          content: (section?.content || "").trim(),
-        }))
-        .filter((section) => section.title.length > 0 || section.content.length > 0)
-    : [];
-  const generationTrace = raw?.generation_trace
-    ? {
-        inputSnapshot: {
-          leadId: (raw?.generation_trace?.input_snapshot?.lead_id || "").trim(),
-          topicKeys: Array.isArray(raw?.generation_trace?.input_snapshot?.topic_keys)
-            ? raw.generation_trace?.input_snapshot?.topic_keys
-                ?.map((item) => (item || "").trim())
-                .filter((item) => item.length > 0)
-            : [],
-          questionCount:
-            typeof raw?.generation_trace?.input_snapshot?.question_count === "number" &&
-            Number.isFinite(raw.generation_trace.input_snapshot.question_count)
-              ? Math.max(0, Math.floor(raw.generation_trace.input_snapshot.question_count))
-              : 0,
-        },
-        retrievalQuery: (raw?.generation_trace?.retrieval_query || "").trim(),
-        retrievalResults: {
-          candidatesFound:
-            typeof raw?.generation_trace?.retrieval_results?.candidates_found === "number" &&
-            Number.isFinite(raw.generation_trace.retrieval_results.candidates_found)
-              ? Math.max(0, Math.floor(raw.generation_trace.retrieval_results.candidates_found))
-              : 0,
-          finalSelected:
-            typeof raw?.generation_trace?.retrieval_results?.final_selected === "number" &&
-            Number.isFinite(raw.generation_trace.retrieval_results.final_selected)
-              ? Math.max(0, Math.floor(raw.generation_trace.retrieval_results.final_selected))
-              : 0,
-          sources: traceSourceTitles,
-        },
-        promptSections,
-        generationResult: {
-          questionsGenerated:
-            typeof raw?.generation_trace?.generation_result?.questions_generated === "number" &&
-            Number.isFinite(raw.generation_trace.generation_result.questions_generated)
-              ? Math.max(0, Math.floor(raw.generation_trace.generation_result.questions_generated))
-              : 0,
-          generationTimeMs:
-            typeof raw?.generation_trace?.generation_result?.generation_time_ms === "number" &&
-            Number.isFinite(raw.generation_trace.generation_result.generation_time_ms)
-              ? Math.max(0, Math.floor(raw.generation_trace.generation_result.generation_time_ms))
-              : 0,
-          model: (raw?.generation_trace?.generation_result?.model || "").trim(),
-        },
-      }
-    : undefined;
+  const generationTrace = normalizeGenerationTrace(raw?.generation_trace);
 
   return {
     id: (raw?.id || "").trim(),
@@ -929,6 +959,121 @@ export async function createPrepSession(input: PrepCreateSessionInput): Promise<
 
   const payload = (await response.json()) as APISinglePayload<APIPrepSession>;
   return normalizeSession(payload.data);
+}
+
+export async function createPrepSessionStream(
+  input: PrepCreateSessionInput,
+  handlers?: {
+    onStage?: (event: PrepGenerationProgressEvent) => void;
+  },
+): Promise<PrepSession> {
+  const normalizedLeadID = (input.leadId || "").trim();
+  if (!normalizedLeadID) {
+    throw new Error("lead_id is required");
+  }
+
+  const response = await fetch(getAPIURL("/api/prep/sessions/stream"), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "text/event-stream",
+    },
+    body: JSON.stringify({
+      lead_id: normalizedLeadID,
+      topic_keys: Array.isArray(input.topicKeys)
+        ? input.topicKeys.map((item) => (item || "").trim()).filter((item) => item.length > 0)
+        : [],
+      question_count:
+        typeof input.questionCount === "number" && Number.isFinite(input.questionCount)
+          ? Math.max(1, Math.floor(input.questionCount))
+          : DEFAULT_PREP_META.defaultQuestionCount,
+      include_resume: Boolean(input.includeResume),
+      include_profile: Boolean(input.includeProfile),
+      include_lead_docs: Boolean(input.includeLeadDocs),
+    }),
+  });
+  if (!response.ok) {
+    throw await parseAPIError(response, "流式生成备面题目失败");
+  }
+  if (!response.body) {
+    throw new Error("当前环境不支持流式响应");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder("utf-8");
+  let buffer = "";
+  let completedSession: PrepSession | null = null;
+  let streamError: Error | null = null;
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+    buffer = buffer.replace(/\r\n/g, "\n");
+
+    let separatorIndex = buffer.indexOf("\n\n");
+    while (separatorIndex >= 0) {
+      const frame = buffer.slice(0, separatorIndex);
+      buffer = buffer.slice(separatorIndex + 2);
+      const parsed = parseSSEFrame(frame);
+      if (parsed && parsed.data) {
+        if (parsed.event === "stage") {
+          const rawStage = JSON.parse(parsed.data) as APIPrepStreamStageEvent;
+          handlers?.onStage?.({
+            stage: (rawStage.stage || "").trim(),
+            status: (rawStage.status || "").trim(),
+            message: rawStage.message || "",
+            delta: rawStage.delta || "",
+            trace: normalizeGenerationTrace(rawStage.trace),
+          });
+        } else if (parsed.event === "completed") {
+          const completedPayload = JSON.parse(parsed.data) as { session?: APIPrepSession };
+          completedSession = normalizeSession(completedPayload.session);
+        } else if (parsed.event === "error") {
+          const errorPayload = JSON.parse(parsed.data) as { message?: string; error?: string };
+          streamError = new Error((errorPayload.message || errorPayload.error || "流式生成失败").trim());
+        }
+      }
+      separatorIndex = buffer.indexOf("\n\n");
+    }
+
+    if (done) {
+      break;
+    }
+  }
+
+  if (streamError) {
+    throw streamError;
+  }
+  if (!completedSession) {
+    throw new Error("流式生成结束但未收到会话结果");
+  }
+  return completedSession;
+}
+
+function parseSSEFrame(frame: string): { event: string; data: string } | null {
+  const lines = frame.split("\n");
+  let eventName = "message";
+  const dataLines: string[] = [];
+  for (const line of lines) {
+    const trimmed = line.trimEnd();
+    if (!trimmed || trimmed.startsWith(":")) {
+      continue;
+    }
+    if (trimmed.startsWith("event:")) {
+      eventName = trimmed.slice("event:".length).trim();
+      continue;
+    }
+    if (trimmed.startsWith("data:")) {
+      dataLines.push(trimmed.slice("data:".length).trimStart());
+    }
+  }
+  if (dataLines.length === 0) {
+    return null;
+  }
+  return {
+    event: eventName,
+    data: dataLines.join("\n"),
+  };
 }
 
 export async function savePrepDraftAnswers(sessionId: string, answers: PrepAnswer[]): Promise<PrepDraftAnswersSaveResult> {

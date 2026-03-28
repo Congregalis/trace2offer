@@ -40,6 +40,22 @@ func main() {
 	port := getenv("PORT", "8080")
 	dataDir := getenv("T2O_DATA_DIR", "./data")
 	model := getenv("T2O_AGENT_MODEL", "gpt-5-mini")
+	openAITimeoutSeconds, err := getenvInt("T2O_OPENAI_TIMEOUT_SECONDS", 60)
+	if err != nil {
+		log.Fatalf("invalid T2O_OPENAI_TIMEOUT_SECONDS: %v", err)
+	}
+	prepOpenAITimeoutSeconds, err := getenvInt("T2O_PREP_OPENAI_TIMEOUT_SECONDS", 180)
+	if err != nil {
+		log.Fatalf("invalid T2O_PREP_OPENAI_TIMEOUT_SECONDS: %v", err)
+	}
+	doclingTimeoutSeconds, err := getenvInt("T2O_DOCLING_TIMEOUT_SECONDS", 120)
+	if err != nil {
+		log.Fatalf("invalid T2O_DOCLING_TIMEOUT_SECONDS: %v", err)
+	}
+	maxSteps, err := getenvInt("T2O_AGENT_MAX_STEPS", 6)
+	if err != nil {
+		log.Fatalf("invalid T2O_AGENT_MAX_STEPS: %v", err)
+	}
 
 	leadStore, err := storage.NewFileLeadStore(filepath.Join(dataDir, "leads.json"))
 	if err != nil {
@@ -85,7 +101,7 @@ func main() {
 			getenv("OPENAI_API_KEY", ""),
 			getenv("T2O_OPENAI_BASE_URL", ""),
 			model,
-			60*time.Second,
+			time.Duration(prepOpenAITimeoutSeconds)*time.Second,
 		)
 		if modelErr != nil {
 			log.Printf("init prep question model skipped: %v", modelErr)
@@ -97,19 +113,6 @@ func main() {
 	prepService, err := prep.NewService(prepConfig, prepOptions...)
 	if err != nil {
 		log.Fatalf("init prep service failed: %v", err)
-	}
-
-	maxSteps, err := getenvInt("T2O_AGENT_MAX_STEPS", 6)
-	if err != nil {
-		log.Fatalf("invalid T2O_AGENT_MAX_STEPS: %v", err)
-	}
-	openAITimeoutSeconds, err := getenvInt("T2O_OPENAI_TIMEOUT_SECONDS", 60)
-	if err != nil {
-		log.Fatalf("invalid T2O_OPENAI_TIMEOUT_SECONDS: %v", err)
-	}
-	doclingTimeoutSeconds, err := getenvInt("T2O_DOCLING_TIMEOUT_SECONDS", 120)
-	if err != nil {
-		log.Fatalf("invalid T2O_DOCLING_TIMEOUT_SECONDS: %v", err)
 	}
 
 	runtime, err := agent.NewManagedRuntime(agent.ManagedRuntimeConfig{

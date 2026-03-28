@@ -383,7 +383,7 @@ func (s *Service) CreateSession(ctx context.Context, lead model.Lead, input Crea
 		return Session{}, err
 	}
 
-	generated, err := s.questionGen.Generate(GenerationConfig{
+	generated, err := s.questionGen.GenerateWithContext(ctx, GenerationConfig{
 		Lead:            lead,
 		LeadID:          input.LeadID,
 		TopicKeys:       input.TopicKeys,
@@ -392,6 +392,57 @@ func (s *Service) CreateSession(ctx context.Context, lead model.Lead, input Crea
 		IncludeProfile:  input.IncludeProfile,
 		IncludeLeadDocs: input.IncludeLeadDocs,
 	})
+	if err != nil {
+		return Session{}, err
+	}
+	if generated == nil || generated.Session == nil {
+		return Session{}, fmt.Errorf("question generation returned empty session")
+	}
+	return *generated.Session, nil
+}
+
+func (s *Service) CreateSessionWithProgress(
+	ctx context.Context,
+	lead model.Lead,
+	input CreateSessionInput,
+	reporter GenerationProgressReporter,
+) (Session, error) {
+	if err := s.ensureEnabled(); err != nil {
+		return Session{}, err
+	}
+	if s.sessionStore == nil {
+		return Session{}, ErrSessionStoreUnavailable
+	}
+	if s.questionGen == nil {
+		return Session{}, ErrQuestionGeneratorUnavailable
+	}
+	if err := s.ensureEmbeddingReady(); err != nil {
+		return Session{}, err
+	}
+
+	leadID := strings.TrimSpace(lead.ID)
+	if leadID == "" {
+		return Session{}, &ValidationError{Field: "lead_id", Message: "lead_id is required"}
+	}
+	inputLeadID := strings.TrimSpace(input.LeadID)
+	if inputLeadID == "" {
+		input.LeadID = leadID
+	} else if inputLeadID != leadID {
+		return Session{}, &ValidationError{Field: "lead_id", Message: "lead_id does not match selected lead"}
+	}
+	if err := s.validateSessionTopicKeys(input.TopicKeys); err != nil {
+		return Session{}, err
+	}
+
+	generated, err := s.questionGen.GenerateWithProgress(ctx, GenerationConfig{
+		Lead:            lead,
+		LeadID:          input.LeadID,
+		TopicKeys:       input.TopicKeys,
+		QuestionCount:   input.QuestionCount,
+		IncludeResume:   input.IncludeResume,
+		IncludeProfile:  input.IncludeProfile,
+		IncludeLeadDocs: input.IncludeLeadDocs,
+	}, reporter)
 	if err != nil {
 		return Session{}, err
 	}
@@ -430,7 +481,7 @@ func (s *Service) GenerateQuestions(ctx context.Context, lead model.Lead, input 
 		return nil, GenerationTrace{}, nil, err
 	}
 
-	generated, err := s.questionGen.Generate(GenerationConfig{
+	generated, err := s.questionGen.GenerateWithContext(ctx, GenerationConfig{
 		Lead:            lead,
 		LeadID:          input.LeadID,
 		TopicKeys:       input.TopicKeys,

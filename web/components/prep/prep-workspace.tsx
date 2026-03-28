@@ -4,18 +4,15 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { createPrepSession, fetchPrepLeadContextPreview, fetchPrepMeta, fetchPrepSession, previewPrepRetrieval } from "@/lib/prep-api";
-import { DEFAULT_PREP_META, PrepLeadContextPreview, PrepMeta, PrepRetrievalPreview, PrepSession } from "@/lib/prep-types";
+import { createPrepSessionStream, fetchPrepLeadContextPreview, fetchPrepMeta, fetchPrepSession } from "@/lib/prep-api";
+import { DEFAULT_PREP_META, PrepGenerationTrace, PrepLeadContextPreview, PrepMeta, PrepSession } from "@/lib/prep-types";
 import { AnswerDraftEditor } from "./answer-draft-editor";
 import { PrepConfigPanel, PrepGenerationConfig } from "./prep-config-panel";
 import { PrepContextPreviewCard } from "./prep-context-preview-card";
 import { PrepRunTimeline } from "./prep-run-timeline";
 import { PrepTraceDrawer } from "./prep-trace-drawer";
 import { QuestionList } from "./question-list";
-import { RetrievalTracePanel } from "./retrieval-trace-panel";
 
 function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === "AbortError";
@@ -38,11 +35,9 @@ export function PrepWorkspace() {
   const [session, setSession] = useState<PrepSession | null>(null);
   const [practiceError, setPracticeError] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
-
-  const [retrievalQuery, setRetrievalQuery] = useState("");
-  const [retrievalPreview, setRetrievalPreview] = useState<PrepRetrievalPreview | null>(null);
-  const [retrievalError, setRetrievalError] = useState<string | null>(null);
-  const [isRetrievalLoading, setIsRetrievalLoading] = useState(false);
+  const [liveTrace, setLiveTrace] = useState<PrepGenerationTrace | null>(null);
+  const [liveStageStatus, setLiveStageStatus] = useState<Record<string, string>>({});
+  const [liveStageOutput, setLiveStageOutput] = useState<Record<string, string>>({});
 
   const [config, setConfig] = useState<PrepGenerationConfig>({
     topicKeys: [],
@@ -97,13 +92,6 @@ export function PrepWorkspace() {
     void fetchPrepLeadContextPreview(normalizedLeadID, controller.signal)
       .then((preview) => {
         setContextPreview(preview);
-        setRetrievalQuery((previous) => {
-          if (previous.trim()) {
-            return previous;
-          }
-          const query = `${preview.company || ""} ${preview.position || ""} 面试问题`.trim();
-          return query || "面试准备";
-        });
         setConfig((previous) => ({
           ...previous,
           topicKeys: previous.topicKeys.length > 0 ? previous.topicKeys : preview.topicKeys,
@@ -159,17 +147,39 @@ export function PrepWorkspace() {
     }
     setIsGenerating(true);
     setPracticeError(null);
+    setLiveTrace(null);
+    setLiveStageStatus({});
+    setLiveStageOutput({});
 
-    void createPrepSession({
+    void createPrepSessionStream({
       leadId: leadID.trim(),
       topicKeys: config.topicKeys,
       questionCount: config.questionCount,
       includeResume: config.includeResume,
       includeProfile: config.includeProfile,
       includeLeadDocs: config.includeLeadDocs,
+    }, {
+      onStage: (event) => {
+        if (event.trace) {
+          setLiveTrace(event.trace);
+        }
+        if (event.stage) {
+          setLiveStageStatus((previous) => ({
+            ...previous,
+            [event.stage]: event.status || previous[event.stage] || "",
+          }));
+        }
+        if (event.stage && event.delta) {
+          setLiveStageOutput((previous) => ({
+            ...previous,
+            [event.stage]: `${previous[event.stage] || ""}${event.delta}`,
+          }));
+        }
+      },
     })
       .then((createdSession) => {
         setSession(createdSession);
+        setLiveTrace(createdSession.generationTrace || null);
 
         const nextQuery = new URLSearchParams(searchParams.toString());
         nextQuery.set("lead_id", leadID.trim());
@@ -185,40 +195,7 @@ export function PrepWorkspace() {
       });
   };
 
-  const handlePreviewRetrieval = () => {
-    if (!leadID.trim()) {
-      setRetrievalError("lead_id 缺失，无法预览检索链路。");
-      return;
-    }
-    if (!retrievalQuery.trim()) {
-      setRetrievalError("请输入检索 query。");
-      return;
-    }
-
-    setIsRetrievalLoading(true);
-    setRetrievalError(null);
-
-    void previewPrepRetrieval({
-      leadId: leadID.trim(),
-      query: retrievalQuery.trim(),
-      topicKeys: config.topicKeys,
-      topK: config.questionCount,
-      includeTrace: true,
-      includeResume: config.includeResume,
-      includeProfile: config.includeProfile,
-      includeLeadDocs: config.includeLeadDocs,
-    })
-      .then((preview) => {
-        setRetrievalPreview(preview);
-      })
-      .catch((error: unknown) => {
-        const message = error instanceof Error && error.message ? error.message : "加载检索预览失败";
-        setRetrievalError(message);
-      })
-      .finally(() => {
-        setIsRetrievalLoading(false);
-      });
-  };
+  const timelineTrace = isGenerating ? liveTrace : session?.generationTrace || liveTrace;
 
   return (
     <main className="mx-auto w-full max-w-7xl px-4 pb-12 pt-6 sm:px-6">
@@ -262,29 +239,12 @@ export function PrepWorkspace() {
                 <PrepTraceDrawer trace={session?.generationTrace || null} />
               </div>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">检索预览</CardTitle>
-                  <CardDescription>先看候选召回和最终上下文，再决定是否生成题目。</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="flex flex-col gap-2 sm:flex-row">
-                    <Input
-                      value={retrievalQuery}
-                      onChange={(event) => setRetrievalQuery(event.target.value)}
-                      placeholder="输入检索 query，例如：RAG 常见面试问题"
-                      disabled={!meta.enabled || !leadID.trim() || isRetrievalLoading}
-                    />
-                    <Button type="button" onClick={handlePreviewRetrieval} disabled={!meta.enabled || !leadID.trim() || isRetrievalLoading}>
-                      {isRetrievalLoading ? "预览中..." : "预览检索链路"}
-                    </Button>
-                  </div>
-                  {retrievalError ? <p className="text-sm text-destructive">{retrievalError}</p> : null}
-                </CardContent>
-              </Card>
-
-              <RetrievalTracePanel preview={retrievalPreview} />
-              <PrepRunTimeline trace={session?.generationTrace || null} />
+              <PrepRunTimeline
+                trace={timelineTrace || null}
+                stageStatus={liveStageStatus}
+                stageOutput={liveStageOutput}
+                isStreaming={isGenerating}
+              />
               <QuestionList questions={session?.questions || []} />
               {session ? <AnswerDraftEditor sessionId={session.id} questions={session.questions} initialAnswers={session.answers} /> : null}
             </div>

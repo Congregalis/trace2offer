@@ -147,6 +147,7 @@ func NewRouter(leads storage.LeadStore, candidates storage.CandidateStore, leadT
 		prep.DELETE("/knowledge/:scope/:scope_id/documents/:filename", h.deletePrepKnowledgeDocument)
 		prep.POST("/retrieval/preview", h.searchPrepRetrieval)
 		prep.POST("/sessions", h.createPrepSession)
+		prep.POST("/sessions/stream", h.streamPrepSession)
 		prep.GET("/sessions/:session_id", h.getPrepSession)
 		prep.PUT("/sessions/:session_id/draft-answers", h.updatePrepDraftAnswers)
 
@@ -1054,6 +1055,66 @@ func (h *handler) createPrepSession(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusCreated, gin.H{"data": created})
+}
+
+func (h *handler) streamPrepSession(c *gin.Context) {
+	if h.prep == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"message": "prep service is not configured"})
+		return
+	}
+	if h.leads == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"message": "lead service is not configured"})
+		return
+	}
+
+	input, ok := bindPrepCreateSessionInput(c)
+	if !ok {
+		return
+	}
+
+	lead, found := findLeadByID(h.leads.List(), input.LeadID)
+	if !found {
+		c.JSON(http.StatusNotFound, gin.H{"message": "lead not found"})
+		return
+	}
+
+	flusher, ok := c.Writer.(http.Flusher)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "streaming is not supported"})
+		return
+	}
+
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+	c.Header("X-Accel-Buffering", "no")
+	c.Status(http.StatusOK)
+
+	sendEvent := func(name string, payload any) {
+		if c.Request.Context().Err() != nil {
+			return
+		}
+		c.SSEvent(name, payload)
+		flusher.Flush()
+	}
+
+	sendEvent("started", gin.H{
+		"lead_id": input.LeadID,
+	})
+
+	created, err := h.prep.CreateSessionWithProgress(c.Request.Context(), lead, input, func(event prep.GenerationProgressEvent) {
+		sendEvent("stage", event)
+	})
+	if err != nil {
+		sendEvent("error", gin.H{
+			"message": err.Error(),
+		})
+		return
+	}
+
+	sendEvent("completed", gin.H{
+		"session": created,
+	})
 }
 
 func (h *handler) getPrepSession(c *gin.Context) {

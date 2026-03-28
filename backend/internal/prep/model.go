@@ -167,11 +167,47 @@ type ReferenceAnswer struct {
 }
 
 type GenerationTrace struct {
-	InputSnapshot    InputSnapshot     `json:"input_snapshot"`
-	RetrievalQuery   string            `json:"retrieval_query"`
-	RetrievalResults RetrievalSummary  `json:"retrieval_results"`
-	PromptSections   []PromptSection   `json:"prompt_sections"`
-	GenerationResult GenerationSummary `json:"generation_result"`
+	InputSnapshot    InputSnapshot      `json:"input_snapshot"`
+	QueryPlanning    QueryPlanningTrace `json:"query_planning"`
+	RetrievalQuery   string             `json:"retrieval_query"`
+	RetrievalResults RetrievalSummary   `json:"retrieval_results"`
+	PromptSections   []PromptSection    `json:"prompt_sections"`
+	AssembledPrompt  string             `json:"assembled_prompt"`
+	GenerationResult GenerationSummary  `json:"generation_result"`
+}
+
+const (
+	GenerationStageInputSnapshot  = "input_snapshot"
+	GenerationStageQueryPlanning  = "query_planning"
+	GenerationStageRetrieval      = "retrieval"
+	GenerationStagePromptAssembly = "prompt_assembly"
+	GenerationStageGeneration     = "generation"
+)
+
+const (
+	GenerationProgressStarted   = "started"
+	GenerationProgressProgress  = "progress"
+	GenerationProgressCompleted = "completed"
+)
+
+type GenerationProgressEvent struct {
+	Stage   string           `json:"stage"`
+	Status  string           `json:"status"`
+	Message string           `json:"message,omitempty"`
+	Delta   string           `json:"delta,omitempty"`
+	Trace   *GenerationTrace `json:"trace,omitempty"`
+}
+
+type GenerationProgressReporter func(event GenerationProgressEvent)
+
+type QueryPlanningTrace struct {
+	Strategy      string `json:"strategy"`
+	Model         string `json:"model"`
+	ResumeExcerpt string `json:"resume_excerpt"`
+	JDExcerpt     string `json:"jd_excerpt"`
+	Prompt        string `json:"prompt"`
+	RawOutput     string `json:"raw_output"`
+	FinalQuery    string `json:"final_query"`
 }
 
 type InputSnapshot struct {
