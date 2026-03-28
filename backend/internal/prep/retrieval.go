@@ -78,7 +78,7 @@ func (e *RetrievalEngine) Search(query string, config SearchConfig) (*SearchResu
 	}
 
 	filterScopes := scopesForSearch(normalized.LeadID)
-	filtered := filterByScopeAndTopic(scoredCandidates, filterScopes, normalized)
+	filtered := filterByScope(scoredCandidates, filterScopes)
 	candidateScored := sortScoredDescending(filtered)
 	candidateChunks := toRetrievedChunks(candidateScored, "candidate recalled by cosine similarity", 0)
 	deduped := deduplicateByContentHash(candidateScored)
@@ -95,8 +95,7 @@ func (e *RetrievalEngine) Search(query string, config SearchConfig) (*SearchResu
 		Query:           normalized.Query,
 		NormalizedQuery: normalizedQuery,
 		Filters: SearchFilters{
-			Scope:     scopeNames(filterScopes),
-			TopicKeys: normalized.TopicKeys,
+			Scope: scopeNames(filterScopes),
 		},
 		CandidateChunks: candidateChunks,
 		RetrievedChunks: retrievedChunks,
@@ -119,13 +118,12 @@ func (e *RetrievalEngine) Search(query string, config SearchConfig) (*SearchResu
 				InputCount:  len(allChunks),
 				OutputCount: len(candidateScored),
 				Metadata: map[string]interface{}{
-					"scopes":               scopeNames(filterScopes),
-					"topic_keys":           normalized.TopicKeys,
-					"lead_id":              normalized.LeadID,
-					"company_slug":         normalized.CompanySlug,
-					"include_resume":       normalized.IncludeResume,
-					"include_lead_docs":    normalized.IncludeLeadDocs,
-					"scope_topic_filtered": true,
+					"scopes":            scopeNames(filterScopes),
+					"lead_id":           normalized.LeadID,
+					"company_slug":      normalized.CompanySlug,
+					"include_resume":    normalized.IncludeResume,
+					"include_lead_docs": normalized.IncludeLeadDocs,
+					"scope_filtered":    true,
 				},
 			},
 			StageDeduplication: TraceStage{
@@ -152,7 +150,6 @@ type normalizedSearchConfig struct {
 	LeadID          string
 	CompanySlug     string
 	Query           string
-	TopicKeys       []string
 	TopK            int
 	IncludeTrace    bool
 	IncludeResume   bool
@@ -168,11 +165,6 @@ func normalizeSearchConfig(query string, config SearchConfig) (normalizedSearchC
 		return normalizedSearchConfig{}, &ValidationError{Field: "query", Message: "query is required"}
 	}
 
-	topicKeys, err := normalizeRetrievalTopicKeys(config.TopicKeys)
-	if err != nil {
-		return normalizedSearchConfig{}, err
-	}
-
 	topK := config.TopK
 	if topK <= 0 {
 		topK = defaultSearchTopK
@@ -185,7 +177,6 @@ func normalizeSearchConfig(query string, config SearchConfig) (normalizedSearchC
 		LeadID:          strings.TrimSpace(config.LeadID),
 		CompanySlug:     normalizeCompanySlug(config.CompanySlug),
 		Query:           rawQuery,
-		TopicKeys:       topicKeys,
 		TopK:            topK,
 		IncludeTrace:    config.IncludeTrace,
 		IncludeResume:   config.IncludeResume,
@@ -288,7 +279,7 @@ func scopesForSearch(leadID string) []Scope {
 	return []Scope{ScopeTopics}
 }
 
-func filterByScopeAndTopic(scored []scoredChunk, scopes []Scope, config normalizedSearchConfig) []scoredChunk {
+func filterByScope(scored []scoredChunk, scopes []Scope) []scoredChunk {
 	if len(scored) == 0 {
 		return []scoredChunk{}
 	}
@@ -297,20 +288,10 @@ func filterByScopeAndTopic(scored []scoredChunk, scopes []Scope, config normaliz
 		allowedScopes[scope] = struct{}{}
 	}
 
-	topicSet := make(map[string]struct{}, len(config.TopicKeys))
-	for _, key := range config.TopicKeys {
-		topicSet[key] = struct{}{}
-	}
-
 	result := make([]scoredChunk, 0, len(scored))
 	for _, item := range scored {
 		if _, ok := allowedScopes[item.chunk.Scope]; !ok {
 			continue
-		}
-		if item.chunk.Scope == ScopeTopics && len(topicSet) > 0 {
-			if _, ok := topicSet[item.chunk.ScopeID]; !ok {
-				continue
-			}
 		}
 		result = append(result, item)
 	}
@@ -431,29 +412,6 @@ func unpackEmbedding(raw []byte) ([]float32, error) {
 		values[i] = math.Float32frombits(bits)
 	}
 	return values, nil
-}
-
-func normalizeRetrievalTopicKeys(raw []string) ([]string, error) {
-	if len(raw) == 0 {
-		return []string{}, nil
-	}
-	seen := map[string]struct{}{}
-	normalized := make([]string, 0, len(raw))
-	for _, item := range raw {
-		if strings.TrimSpace(item) == "" {
-			continue
-		}
-		key, err := normalizeTopicKey(item)
-		if err != nil {
-			return nil, err
-		}
-		if _, exists := seen[key]; exists {
-			continue
-		}
-		seen[key] = struct{}{}
-		normalized = append(normalized, key)
-	}
-	return normalized, nil
 }
 
 func normalizeSearchQuery(query string) string {

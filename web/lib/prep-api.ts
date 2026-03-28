@@ -66,7 +66,6 @@ interface APIPrepLeadContextPreview {
   company?: string;
   position?: string;
   has_resume?: boolean;
-  topic_keys?: string[];
   sources?: APIPrepContextSource[];
 }
 
@@ -135,7 +134,6 @@ interface APIRetrievalPreview {
   normalized_query?: string;
   filters?: {
     scope?: string[];
-    topic_keys?: string[];
   };
   trace?: {
     stage_query_normalization?: APITraceStage;
@@ -182,7 +180,6 @@ interface APIPrepSession {
   position?: string;
   status?: string;
   config?: {
-    topic_keys?: string[];
     question_count?: number;
     include_resume?: boolean;
     include_lead_docs?: boolean;
@@ -195,7 +192,6 @@ interface APIPrepSession {
   generation_trace?: {
     input_snapshot?: {
       lead_id?: string;
-      topic_keys?: string[];
       question_count?: number;
     };
     query_planning?: {
@@ -323,18 +319,12 @@ function normalizeContextSource(raw: APIPrepContextSource): PrepContextSource {
 
 function normalizeContextPreview(raw: APIPrepLeadContextPreview | undefined): PrepLeadContextPreview {
   const sources = Array.isArray(raw?.sources) ? raw.sources.map(normalizeContextSource) : [];
-  const topicKeys = Array.isArray(raw?.topic_keys)
-    ? raw.topic_keys
-        .map((key) => (key || "").trim())
-        .filter((key) => key.length > 0)
-    : [];
 
   return {
     leadId: (raw?.lead_id || "").trim(),
     company: (raw?.company || "").trim(),
     position: (raw?.position || "").trim(),
     hasResume: Boolean(raw?.has_resume),
-    topicKeys,
     sources,
   };
 }
@@ -404,10 +394,6 @@ function normalizeIndexChunk(raw: APIPrepIndexChunk): PrepIndexChunk {
 }
 
 function normalizeRetrievalPreview(raw: APIRetrievalPreview | undefined): PrepRetrievalPreview {
-  const topicKeys = Array.isArray(raw?.filters?.topic_keys)
-    ? raw.filters.topic_keys.map((item) => (item || "").trim()).filter((item) => item.length > 0)
-    : [];
-
   const normalizeRetrievedChunks = (chunks: APIRetrievedChunk[] | undefined) =>
     Array.isArray(chunks)
       ? chunks.map((chunk) => ({
@@ -434,7 +420,6 @@ function normalizeRetrievalPreview(raw: APIRetrievalPreview | undefined): PrepRe
     normalizedQuery: (raw?.normalized_query || "").trim(),
     filters: {
       scope: normalizePrepScopes(raw?.filters?.scope),
-      topicKeys,
     },
     trace: raw?.trace
       ? {
@@ -522,9 +507,6 @@ function normalizeGenerationTrace(raw: APIPrepSession["generation_trace"] | unde
   return {
     inputSnapshot: {
       leadId: (raw?.input_snapshot?.lead_id || "").trim(),
-      topicKeys: Array.isArray(raw?.input_snapshot?.topic_keys)
-        ? raw.input_snapshot.topic_keys.map((item) => (item || "").trim()).filter((item) => item.length > 0)
-        : [],
       questionCount:
         typeof raw?.input_snapshot?.question_count === "number" && Number.isFinite(raw.input_snapshot.question_count)
           ? Math.max(0, Math.floor(raw.input_snapshot.question_count))
@@ -575,9 +557,6 @@ function normalizeSession(raw: APIPrepSession | undefined): PrepSession {
     ? raw.answers.map(normalizeAnswer).filter((item) => item.questionId > 0)
     : [];
   const sources = Array.isArray(raw?.sources) ? raw.sources.map(normalizeContextSource) : [];
-  const topicKeys = Array.isArray(raw?.config?.topic_keys)
-    ? raw.config.topic_keys.map((item) => (item || "").trim()).filter((item) => item.length > 0)
-    : [];
   const generationTrace = normalizeGenerationTrace(raw?.generation_trace);
 
   return {
@@ -587,7 +566,6 @@ function normalizeSession(raw: APIPrepSession | undefined): PrepSession {
     position: (raw?.position || "").trim(),
     status: (raw?.status || "").trim(),
     config: {
-      topicKeys,
       questionCount:
         typeof raw?.config?.question_count === "number" && Number.isFinite(raw.config.question_count)
           ? Math.max(0, Math.floor(raw.config.question_count))
@@ -890,7 +868,6 @@ export async function previewPrepRetrieval(input: PrepRetrievalPreviewRequest, s
     body: JSON.stringify({
       lead_id: (input.leadId || "").trim(),
       query: (input.query || "").trim(),
-      topic_keys: Array.isArray(input.topicKeys) ? input.topicKeys.map((item) => (item || "").trim()).filter((item) => item.length > 0) : [],
       top_k: typeof input.topK === "number" && Number.isFinite(input.topK) ? Math.max(1, Math.floor(input.topK)) : undefined,
       include_trace: typeof input.includeTrace === "boolean" ? input.includeTrace : true,
       include_resume: typeof input.includeResume === "boolean" ? input.includeResume : true,
@@ -936,9 +913,6 @@ export async function createPrepSession(input: PrepCreateSessionInput): Promise<
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       lead_id: normalizedLeadID,
-      topic_keys: Array.isArray(input.topicKeys)
-        ? input.topicKeys.map((item) => (item || "").trim()).filter((item) => item.length > 0)
-        : [],
       question_count:
         typeof input.questionCount === "number" && Number.isFinite(input.questionCount)
           ? Math.max(1, Math.floor(input.questionCount))
@@ -974,9 +948,6 @@ export async function createPrepSessionStream(
     },
     body: JSON.stringify({
       lead_id: normalizedLeadID,
-      topic_keys: Array.isArray(input.topicKeys)
-        ? input.topicKeys.map((item) => (item || "").trim()).filter((item) => item.length > 0)
-        : [],
       question_count:
         typeof input.questionCount === "number" && Number.isFinite(input.questionCount)
           ? Math.max(1, Math.floor(input.questionCount))

@@ -21,9 +21,8 @@ Goal:
 
 Hard rules:
 1) Prioritize job-critical skills from JD and candidate-specific strengths from resume.
-2) Include topic keys when they are relevant; avoid stuffing unrelated keywords.
-3) Keep query concise (roughly <= 20 terms), information-dense, and search-friendly.
-4) Output JSON only: {"query":"..."}`
+2) Keep query concise (roughly <= 20 terms), information-dense, and search-friendly.
+3) Output JSON only: {"query":"..."}`
 
 type QuestionModel interface {
 	Name() string
@@ -207,7 +206,6 @@ func (g *QuestionGenerator) GenerateFromInput(ctx context.Context, lead model.Le
 	result, err := g.GenerateWithContext(ctx, GenerationConfig{
 		Lead:            lead,
 		LeadID:          input.LeadID,
-		TopicKeys:       input.TopicKeys,
 		QuestionCount:   input.QuestionCount,
 		IncludeResume:   input.IncludeResume,
 		IncludeLeadDocs: input.IncludeLeadDocs,
@@ -241,10 +239,6 @@ func (g *QuestionGenerator) GenerateWithProgress(
 	if leadID == "" {
 		return nil, &ValidationError{Field: "lead_id", Message: "lead_id is required"}
 	}
-	topicKeys := cleanStrings(config.TopicKeys)
-	if len(topicKeys) == 0 {
-		return nil, &ValidationError{Field: "topic_keys", Message: "topic_keys is required"}
-	}
 	questionCount := config.QuestionCount
 	if questionCount <= 0 {
 		questionCount = g.defaultQuestionCount
@@ -256,7 +250,6 @@ func (g *QuestionGenerator) GenerateWithProgress(
 	trace := GenerationTrace{
 		InputSnapshot: InputSnapshot{
 			LeadID:        leadID,
-			TopicKeys:     append([]string{}, topicKeys...),
 			QuestionCount: questionCount,
 		},
 		QueryPlanning: QueryPlanningTrace{},
@@ -287,7 +280,7 @@ func (g *QuestionGenerator) GenerateWithProgress(
 	}
 	jdForQuery := strings.TrimSpace(config.Lead.JDText)
 	queryPlanningDeltaCount := 0
-	queryPlanning := g.planRetrievalQuery(ctx, config.Lead, topicKeys, resumeForQuery, jdForQuery, func(delta string) {
+	queryPlanning := g.planRetrievalQuery(ctx, config.Lead, resumeForQuery, jdForQuery, func(delta string) {
 		queryPlanningDeltaCount++
 		g.emitProgress(reporter, GenerationProgressEvent{
 			Stage:   GenerationStageQueryPlanning,
@@ -299,7 +292,7 @@ func (g *QuestionGenerator) GenerateWithProgress(
 	})
 	retrievalQuery := strings.TrimSpace(queryPlanning.FinalQuery)
 	if retrievalQuery == "" {
-		retrievalQuery = fallbackRetrievalQuery(config.Lead, topicKeys)
+		retrievalQuery = fallbackRetrievalQuery(config.Lead)
 		queryPlanning.FinalQuery = retrievalQuery
 		queryPlanning.Strategy = "fallback"
 	}
@@ -336,7 +329,6 @@ func (g *QuestionGenerator) GenerateWithProgress(
 			LeadID:          leadID,
 			CompanySlug:     normalizeCompanySlug(config.Lead.Company),
 			Query:           retrievalQuery,
-			TopicKeys:       topicKeys,
 			TopK:            questionCount,
 			IncludeTrace:    true,
 			IncludeResume:   config.IncludeResume,
@@ -370,14 +362,12 @@ func (g *QuestionGenerator) GenerateWithProgress(
 
 	promptSections := BuildQuestionGenerationPromptSections(PromptBuildInput{
 		Count:            questionCount,
-		TopicKeys:        topicKeys,
 		RetrievedChunks:  searchResult.RetrievedChunks,
 		CandidateProfile: candidateProfile,
 		JobDescription:   strings.TrimSpace(config.Lead.JDText),
 	})
 	assembledPrompt := BuildQuestionGenerationPrompt(PromptConfig{
 		Count:            questionCount,
-		TopicKeys:        topicKeys,
 		RetrievedChunks:  searchResult.RetrievedChunks,
 		CandidateProfile: candidateProfile,
 		JobDescription:   strings.TrimSpace(config.Lead.JDText),
@@ -465,7 +455,7 @@ func (g *QuestionGenerator) GenerateWithProgress(
 			return nil, err
 		}
 	}
-	questions := parseGeneratedQuestions(modelOutput, questionCount, sourceTitles, topicKeys)
+	questions := parseGeneratedQuestions(modelOutput, questionCount, sourceTitles)
 
 	sources := []ContextSource{}
 	if g.resolver != nil {
@@ -495,7 +485,6 @@ func (g *QuestionGenerator) GenerateWithProgress(
 		Position: strings.TrimSpace(config.Lead.Position),
 		Status:   PrepSessionStatusDraft,
 		Config: SessionConfig{
-			TopicKeys:       topicKeys,
 			QuestionCount:   questionCount,
 			IncludeResume:   config.IncludeResume,
 			IncludeLeadDocs: config.IncludeLeadDocs,
@@ -518,7 +507,7 @@ func (g *QuestionGenerator) GenerateWithProgress(
 	return &GenerationResult{Session: session}, nil
 }
 
-func parseGeneratedQuestions(raw string, questionCount int, defaultSources []string, topicKeys []string) []Question {
+func parseGeneratedQuestions(raw string, questionCount int, defaultSources []string) []Question {
 	if questionCount <= 0 {
 		questionCount = defaultQuestionCount
 	}
@@ -572,17 +561,10 @@ func parseGeneratedQuestions(raw string, questionCount int, defaultSources []str
 
 	for len(questions) < questionCount {
 		nextID := len(questions) + 1
-		topic := "通用"
-		if len(topicKeys) > 0 {
-			topic = strings.TrimSpace(topicKeys[nextID%len(topicKeys)])
-			if topic == "" {
-				topic = "通用"
-			}
-		}
 		questions = append(questions, Question{
 			ID:      nextID,
 			Type:    "technical",
-			Content: fmt.Sprintf("请说明你在 %s 相关项目中的关键决策和权衡。", topic),
+			Content: "请说明你在一个复杂项目中的关键技术决策与权衡。",
 			ExpectedPoints: []string{
 				"背景与目标",
 				"技术方案与取舍",
@@ -627,12 +609,11 @@ func cleanStrings(values []string) []string {
 func (g *QuestionGenerator) planRetrievalQuery(
 	ctx context.Context,
 	lead model.Lead,
-	topicKeys []string,
 	resumeText string,
 	jdText string,
 	onDelta func(string),
 ) QueryPlanningTrace {
-	fallbackQuery := fallbackRetrievalQuery(lead, topicKeys)
+	fallbackQuery := fallbackRetrievalQuery(lead)
 	trace := QueryPlanningTrace{
 		Strategy:      "fallback",
 		Model:         "fallback",
@@ -647,7 +628,7 @@ func (g *QuestionGenerator) planRetrievalQuery(
 		return trace
 	}
 
-	prompt := buildRetrievalQueryPlannerPrompt(lead, topicKeys, resumeText, jdText)
+	prompt := buildRetrievalQueryPlannerPrompt(lead, resumeText, jdText)
 	modelName := strings.TrimSpace(g.model.Name())
 	if modelName == "" {
 		modelName = "unknown"
@@ -690,7 +671,7 @@ func (g *QuestionGenerator) planRetrievalQuery(
 	return trace
 }
 
-func buildRetrievalQueryPlannerPrompt(lead model.Lead, topicKeys []string, resumeText string, jdText string) string {
+func buildRetrievalQueryPlannerPrompt(lead model.Lead, resumeText string, jdText string) string {
 	return strings.Join([]string{
 		"<query_task>",
 		"Create one retrieval query for interview question generation.",
@@ -700,7 +681,6 @@ func buildRetrievalQueryPlannerPrompt(lead model.Lead, topicKeys []string, resum
 		"<lead>",
 		fmt.Sprintf("company: %s", strings.TrimSpace(lead.Company)),
 		fmt.Sprintf("position: %s", strings.TrimSpace(lead.Position)),
-		fmt.Sprintf("topic_keys: %s", strings.Join(topicKeys, ", ")),
 		"</lead>",
 		"",
 		"<resume>",
@@ -833,11 +813,10 @@ func normalizeRetrievalQuery(query string) string {
 	return normalized
 }
 
-func fallbackRetrievalQuery(lead model.Lead, topicKeys []string) string {
+func fallbackRetrievalQuery(lead model.Lead) string {
 	parts := cleanStrings([]string{
 		strings.TrimSpace(lead.Position),
 		strings.TrimSpace(lead.Company),
-		strings.Join(topicKeys, " "),
 		"interview preparation",
 	})
 	query := strings.TrimSpace(strings.Join(parts, " "))
@@ -937,7 +916,6 @@ func splitTextIntoChunks(text string, chunkSize int) []string {
 
 func cloneGenerationTrace(trace GenerationTrace) *GenerationTrace {
 	clone := trace
-	clone.InputSnapshot.TopicKeys = append([]string{}, trace.InputSnapshot.TopicKeys...)
 	clone.RetrievalResults.Sources = append([]string{}, trace.RetrievalResults.Sources...)
 	clone.PromptSections = append([]PromptSection{}, trace.PromptSections...)
 	return &clone

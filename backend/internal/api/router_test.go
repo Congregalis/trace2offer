@@ -339,16 +339,12 @@ func TestLeadAndChatAPI(t *testing.T) {
 	if !contextPreviewPayload.Data.HasResume {
 		t.Fatal("expected context has_resume=true")
 	}
-	if len(contextPreviewPayload.Data.TopicKeys) == 0 {
-		t.Fatal("expected context topic_keys not empty")
-	}
 	if !hasPrepContextSource(contextPreviewPayload.Data.Sources, "lead", "jd_text", "JD 原文") {
 		t.Fatalf("expected jd source in context preview, got %+v", contextPreviewPayload.Data.Sources)
 	}
 	resp = doJSONRequest(t, router, http.MethodPost, "/api/prep/retrieval/preview", map[string]any{
 		"lead_id":       leadID,
 		"query":         "RAG 常见面试问题",
-		"topic_keys":    []string{"rag"},
 		"top_k":         5,
 		"include_trace": true,
 	})
@@ -368,7 +364,6 @@ func TestLeadAndChatAPI(t *testing.T) {
 
 	resp = doJSONRequest(t, router, http.MethodPost, "/api/prep/sessions", map[string]any{
 		"lead_id":           leadID,
-		"topic_keys":        []string{"rag"},
 		"question_count":    2,
 		"include_resume":    true,
 		"include_lead_docs": true,
@@ -1066,7 +1061,6 @@ func TestPrepEndpointsReturnConfigErrorWhenHFUnavailable(t *testing.T) {
 	resp = doJSONRequest(t, router, http.MethodPost, "/api/prep/retrieval/preview", map[string]any{
 		"lead_id":           leadID,
 		"query":             "RAG",
-		"topic_keys":        []string{"rag"},
 		"include_resume":    true,
 		"include_lead_docs": true,
 	})
@@ -1074,7 +1068,6 @@ func TestPrepEndpointsReturnConfigErrorWhenHFUnavailable(t *testing.T) {
 
 	resp = doJSONRequest(t, router, http.MethodPost, "/api/prep/sessions", map[string]any{
 		"lead_id":           leadID,
-		"topic_keys":        []string{"rag"},
 		"question_count":    1,
 		"include_resume":    true,
 		"include_lead_docs": true,

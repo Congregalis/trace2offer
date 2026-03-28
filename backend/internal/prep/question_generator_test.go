@@ -52,7 +52,7 @@ func (m *stubStreamingQuestionModel) GenerateStream(_ context.Context, _ string,
 func TestParseGeneratedQuestionsFallbackOnMalformedJSON(t *testing.T) {
 	t.Parallel()
 
-	questions := parseGeneratedQuestions("not-a-json-payload", 3, []string{"rag-fundamentals.md"}, []string{"rag"})
+	questions := parseGeneratedQuestions("not-a-json-payload", 3, []string{"rag-fundamentals.md"})
 	if len(questions) != 3 {
 		t.Fatalf("expected 3 questions, got %d", len(questions))
 	}
@@ -114,7 +114,6 @@ func TestQuestionGeneratorGenerateBuildsTraceAndSession(t *testing.T) {
 			JDText:   "Need strong RAG and system design skills",
 		},
 		LeadID:          "lead_123",
-		TopicKeys:       []string{"rag"},
 		QuestionCount:   2,
 		IncludeResume:   true,
 		IncludeLeadDocs: true,
@@ -182,7 +181,6 @@ func TestQuestionGeneratorUsesStreamingModelWhenAvailable(t *testing.T) {
 			JDText:   "Build streaming APIs",
 		},
 		LeadID:          "lead_stream",
-		TopicKeys:       []string{"streaming"},
 		QuestionCount:   1,
 		IncludeResume:   true,
 		IncludeLeadDocs: true,

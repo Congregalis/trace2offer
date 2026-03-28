@@ -40,7 +40,6 @@ export function PrepWorkspace() {
   const [liveStageOutput, setLiveStageOutput] = useState<Record<string, string>>({});
 
   const [config, setConfig] = useState<PrepGenerationConfig>({
-    topicKeys: [],
     questionCount: DEFAULT_PREP_META.defaultQuestionCount,
     includeResume: true,
     includeLeadDocs: true,
@@ -91,10 +90,6 @@ export function PrepWorkspace() {
     void fetchPrepLeadContextPreview(normalizedLeadID, controller.signal)
       .then((preview) => {
         setContextPreview(preview);
-        setConfig((previous) => ({
-          ...previous,
-          topicKeys: previous.topicKeys.length > 0 ? previous.topicKeys : preview.topicKeys,
-        }));
       })
       .catch((error: unknown) => {
         if (isAbortError(error)) {
@@ -152,7 +147,6 @@ export function PrepWorkspace() {
 
     void createPrepSessionStream({
       leadId: leadID.trim(),
-      topicKeys: config.topicKeys,
       questionCount: config.questionCount,
       includeResume: config.includeResume,
       includeLeadDocs: config.includeLeadDocs,
@@ -223,7 +217,6 @@ export function PrepWorkspace() {
               <PrepContextPreviewCard preview={contextPreview} isLoading={isContextLoading} error={contextError} />
 
               <PrepConfigPanel
-                availableTopicKeys={contextPreview?.topicKeys || []}
                 config={config}
                 onChange={setConfig}
                 onGenerate={handleGenerateQuestions}

@@ -117,33 +117,29 @@ type LeadContextPreview struct {
 	Company   string          `json:"company"`
 	Position  string          `json:"position"`
 	HasResume bool            `json:"has_resume"`
-	TopicKeys []string        `json:"topic_keys"`
 	Sources   []ContextSource `json:"sources"`
 }
 
 type SessionConfig struct {
-	TopicKeys       []string `json:"topic_keys"`
-	QuestionCount   int      `json:"question_count"`
-	IncludeResume   bool     `json:"include_resume"`
-	IncludeLeadDocs bool     `json:"include_lead_docs"`
+	QuestionCount   int  `json:"question_count"`
+	IncludeResume   bool `json:"include_resume"`
+	IncludeLeadDocs bool `json:"include_lead_docs"`
 }
 
 type CreateSessionInput struct {
-	LeadID          string   `json:"lead_id"`
-	TopicKeys       []string `json:"topic_keys"`
-	QuestionCount   int      `json:"question_count"`
-	IncludeResume   bool     `json:"include_resume"`
-	IncludeLeadDocs bool     `json:"include_lead_docs"`
+	LeadID          string `json:"lead_id"`
+	QuestionCount   int    `json:"question_count"`
+	IncludeResume   bool   `json:"include_resume"`
+	IncludeLeadDocs bool   `json:"include_lead_docs"`
 }
 
 type GenerationConfig struct {
 	Lead model.Lead
 
-	LeadID          string   `json:"lead_id"`
-	TopicKeys       []string `json:"topic_keys"`
-	QuestionCount   int      `json:"question_count"`
-	IncludeResume   bool     `json:"include_resume"`
-	IncludeLeadDocs bool     `json:"include_lead_docs"`
+	LeadID          string `json:"lead_id"`
+	QuestionCount   int    `json:"question_count"`
+	IncludeResume   bool   `json:"include_resume"`
+	IncludeLeadDocs bool   `json:"include_lead_docs"`
 }
 
 type GenerationResult struct {
@@ -207,9 +203,8 @@ type QueryPlanningTrace struct {
 }
 
 type InputSnapshot struct {
-	LeadID        string   `json:"lead_id"`
-	TopicKeys     []string `json:"topic_keys"`
-	QuestionCount int      `json:"question_count"`
+	LeadID        string `json:"lead_id"`
+	QuestionCount int    `json:"question_count"`
 }
 
 type RetrievalSummary struct {
@@ -312,14 +307,13 @@ type IndexRun struct {
 }
 
 type SearchConfig struct {
-	LeadID          string   `json:"lead_id"`
-	CompanySlug     string   `json:"company_slug,omitempty"`
-	Query           string   `json:"query"`
-	TopicKeys       []string `json:"topic_keys"`
-	TopK            int      `json:"top_k"`
-	IncludeTrace    bool     `json:"include_trace"`
-	IncludeResume   bool     `json:"include_resume"`
-	IncludeLeadDocs bool     `json:"include_lead_docs"`
+	LeadID          string `json:"lead_id"`
+	CompanySlug     string `json:"company_slug,omitempty"`
+	Query           string `json:"query"`
+	TopK            int    `json:"top_k"`
+	IncludeTrace    bool   `json:"include_trace"`
+	IncludeResume   bool   `json:"include_resume"`
+	IncludeLeadDocs bool   `json:"include_lead_docs"`
 }
 
 type SearchResult struct {
@@ -333,8 +327,7 @@ type SearchResult struct {
 }
 
 type SearchFilters struct {
-	Scope     []string `json:"scope"`
-	TopicKeys []string `json:"topic_keys"`
+	Scope []string `json:"scope"`
 }
 
 type RetrievalTrace struct {

@@ -37,7 +37,7 @@ export function PrepRunTimeline({ trace, stageStatus, stageOutput, isStreaming =
 
   const hasInputData = Boolean(
     trace &&
-      ((trace.inputSnapshot.leadId || "").trim() || trace.inputSnapshot.topicKeys.length > 0 || trace.inputSnapshot.questionCount > 0),
+      ((trace.inputSnapshot.leadId || "").trim() || trace.inputSnapshot.questionCount > 0),
   );
   const hasQueryData = Boolean(trace && ((trace.queryPlanning.finalQuery || "").trim() || (trace.retrievalQuery || "").trim()));
   const hasRetrievalData = Boolean(trace && ((trace.retrievalQuery || "").trim() || trace.retrievalResults.candidatesFound > 0));
@@ -102,8 +102,7 @@ export function PrepRunTimeline({ trace, stageStatus, stageOutput, isStreaming =
               {renderStageBadge("input_snapshot")}
             </div>
             <p className="text-muted-foreground">
-              lead_id={trace?.inputSnapshot.leadId || "-"}，topics={trace?.inputSnapshot.topicKeys.join(", ") || "-"}，question_count=
-              {trace?.inputSnapshot.questionCount || 0}
+              lead_id={trace?.inputSnapshot.leadId || "-"}，question_count={trace?.inputSnapshot.questionCount || 0}
             </p>
           </div>
         ) : null}

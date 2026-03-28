@@ -5,14 +5,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 export interface PrepGenerationConfig {
-  topicKeys: string[];
   questionCount: number;
   includeResume: boolean;
   includeLeadDocs: boolean;
 }
 
 interface PrepConfigPanelProps {
-  availableTopicKeys: string[];
   config: PrepGenerationConfig;
   onChange: (next: PrepGenerationConfig) => void;
   onGenerate: () => void;
@@ -37,20 +35,12 @@ export function GenerateQuestionsButton({
 }
 
 export function PrepConfigPanel({
-  availableTopicKeys,
   config,
   onChange,
   onGenerate,
   isGenerating = false,
   disabled = false,
 }: PrepConfigPanelProps) {
-  const handleTopicToggle = (topicKey: string, checked: boolean) => {
-    const nextTopicKeys = checked
-      ? Array.from(new Set([...config.topicKeys, topicKey]))
-      : config.topicKeys.filter((item) => item !== topicKey);
-    onChange({ ...config, topicKeys: nextTopicKeys });
-  };
-
   return (
     <Card>
       <CardHeader>
@@ -77,29 +67,6 @@ export function PrepConfigPanel({
           />
         </div>
 
-        <div className="space-y-3">
-          <Label className="text-sm">Topic Packs</Label>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {availableTopicKeys.length === 0 ? (
-              <p className="text-sm text-muted-foreground">暂无可选 topic，请先在资料侧维护。</p>
-            ) : (
-              availableTopicKeys.map((topicKey) => {
-                const checked = config.topicKeys.includes(topicKey);
-                return (
-                  <div key={topicKey} className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm">
-                    <Checkbox
-                      checked={checked}
-                      onCheckedChange={(value) => handleTopicToggle(topicKey, Boolean(value))}
-                      disabled={disabled || isGenerating}
-                    />
-                    <span>{topicKey}</span>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
-
         <div className="grid gap-2 sm:grid-cols-2">
           <div className="flex items-center gap-2 text-sm">
             <Checkbox
@@ -122,7 +89,7 @@ export function PrepConfigPanel({
         <GenerateQuestionsButton
           onClick={onGenerate}
           isLoading={isGenerating}
-          disabled={disabled || config.topicKeys.length === 0}
+          disabled={disabled}
         />
       </CardContent>
     </Card>

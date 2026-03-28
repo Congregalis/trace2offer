@@ -42,11 +42,10 @@ func (r *ContextResolver) Resolve(lead model.Lead) (LeadContextPreview, error) {
 	}
 
 	preview := LeadContextPreview{
-		LeadID:    leadID,
-		Company:   strings.TrimSpace(lead.Company),
-		Position:  strings.TrimSpace(lead.Position),
-		TopicKeys: []string{},
-		Sources:   []ContextSource{},
+		LeadID:   leadID,
+		Company:  strings.TrimSpace(lead.Company),
+		Position: strings.TrimSpace(lead.Position),
+		Sources:  []ContextSource{},
 	}
 
 	hasResume, err := r.hasResume()
@@ -55,8 +54,7 @@ func (r *ContextResolver) Resolve(lead model.Lead) (LeadContextPreview, error) {
 	}
 	preview.HasResume = hasResume
 
-	topics := r.topicStore.List()
-	preview.TopicKeys = topicKeysFromTopics(topics)
+	topicKeys := topicKeysFromTopics(r.topicStore.List())
 
 	if strings.TrimSpace(lead.JDText) != "" {
 		preview.Sources = append(preview.Sources, ContextSource{
@@ -73,7 +71,7 @@ func (r *ContextResolver) Resolve(lead model.Lead) (LeadContextPreview, error) {
 		})
 	}
 
-	topicSources, err := r.collectTopicSources(preview.TopicKeys)
+	topicSources, err := r.collectTopicSources(topicKeys)
 	if err != nil {
 		return LeadContextPreview{}, err
 	}

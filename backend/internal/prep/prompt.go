@@ -8,7 +8,6 @@ import (
 
 type PromptConfig struct {
 	Count            int
-	TopicKeys        []string
 	RetrievedChunks  []RetrievedChunk
 	CandidateProfile string
 	JobDescription   string
@@ -16,7 +15,6 @@ type PromptConfig struct {
 
 type PromptBuildInput struct {
 	Count            int
-	TopicKeys        []string
 	RetrievedChunks  []RetrievedChunk
 	CandidateProfile string
 	JobDescription   string
@@ -31,7 +29,7 @@ Your mission:
 Hard rules:
 1) Use only provided inputs (retrieved context, candidate context, and job description). Do not fabricate facts.
 2) Keep each question concise, concrete, and interview-ready.
-3) Ensure topic coverage balance and avoid near-duplicate questions.
+3) Ensure coverage balance and avoid near-duplicate questions.
 4) For each question, produce actionable expected_points that an interviewer can score against.
 5) Output must be strict JSON only, no markdown, no prose outside JSON.`
 
@@ -67,7 +65,6 @@ func BuildQuestionGenerationPromptSections(input PromptBuildInput) QuestionPromp
 	if count <= 0 {
 		count = defaultQuestionCount
 	}
-	topicKeys := normalizeTopicKeysForPrompt(input.TopicKeys)
 
 	return QuestionPromptSections{
 		System:           questionGenerationSystemPrompt,
@@ -77,7 +74,7 @@ func BuildQuestionGenerationPromptSections(input PromptBuildInput) QuestionPromp
 		Task: strings.Join([]string{
 			"<task>",
 			fmt.Sprintf("- Generate exactly %d interview questions.", count),
-			fmt.Sprintf("- Topic coverage target: %s.", strings.Join(topicKeys, ", ")),
+			"- Ensure question-set coverage across core competency dimensions in the supplied context.",
 			"- Each question must be answerable in 3-8 minutes of spoken response.",
 			"- Prioritize high-signal questions that expose trade-offs, decision quality, and execution details.",
 			"</task>",
@@ -113,26 +110,6 @@ func BuildQuestionGenerationPromptSections(input PromptBuildInput) QuestionPromp
 			"</output_format>",
 		}, "\n"),
 	}
-}
-
-func normalizeTopicKeysForPrompt(topicKeys []string) []string {
-	normalized := make([]string, 0, len(topicKeys))
-	seen := map[string]struct{}{}
-	for _, item := range topicKeys {
-		key := strings.TrimSpace(item)
-		if key == "" {
-			continue
-		}
-		if _, ok := seen[key]; ok {
-			continue
-		}
-		seen[key] = struct{}{}
-		normalized = append(normalized, key)
-	}
-	if len(normalized) == 0 {
-		return []string{"general"}
-	}
-	return normalized
 }
 
 func buildContextSection(chunks []RetrievedChunk) string {

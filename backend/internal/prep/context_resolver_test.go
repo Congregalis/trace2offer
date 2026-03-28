@@ -42,9 +42,6 @@ func TestContextResolverResolveAggregatesSources(t *testing.T) {
 	if !preview.HasResume {
 		t.Fatalf("expected has_resume=true")
 	}
-	if len(preview.TopicKeys) != 1 || preview.TopicKeys[0] != "rag" {
-		t.Fatalf("expected topic_keys=[rag], got %+v", preview.TopicKeys)
-	}
 	if !contextSourceExists(preview.Sources, "lead", "jd_text", "JD 原文") {
 		t.Fatalf("expected jd source included, got %+v", preview.Sources)
 	}
@@ -102,9 +99,6 @@ func TestContextResolverResolveWithEmptyTopics(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("get lead context preview: %v", err)
-	}
-	if len(preview.TopicKeys) != 0 {
-		t.Fatalf("expected empty topic_keys, got %+v", preview.TopicKeys)
 	}
 	if contextSourceExistsByScope(preview.Sources, "topic") {
 		t.Fatalf("expected no topic sources when topics empty, got %+v", preview.Sources)

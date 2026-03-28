@@ -16,7 +16,7 @@ func TestRetrievalTopKOrdering(t *testing.T) {
 	engine := NewRetrievalEngine(store, &stubEmbeddingProvider{vectors: map[string][]float32{"query": {1, 0}}})
 	engine.scoreThreshold = 0.01
 
-	result, err := engine.Search("", SearchConfig{Query: "query", TopK: 2, IncludeTrace: true, TopicKeys: []string{"rag"}})
+	result, err := engine.Search("", SearchConfig{Query: "query", TopK: 2, IncludeTrace: true})
 	if err != nil {
 		t.Fatalf("search retrieval: %v", err)
 	}
@@ -43,7 +43,7 @@ func TestRetrievalDeduplication(t *testing.T) {
 	engine := NewRetrievalEngine(store, &stubEmbeddingProvider{vectors: map[string][]float32{"query": {1, 0}}})
 	engine.scoreThreshold = 0.01
 
-	result, err := engine.Search("", SearchConfig{Query: "query", TopK: 5, IncludeTrace: true, LeadID: "lead_1", TopicKeys: []string{"rag"}})
+	result, err := engine.Search("", SearchConfig{Query: "query", TopK: 5, IncludeTrace: true, LeadID: "lead_1"})
 	if err != nil {
 		t.Fatalf("search retrieval: %v", err)
 	}
@@ -56,31 +56,6 @@ func TestRetrievalDeduplication(t *testing.T) {
 	}
 	if result.Trace.StageDeduplication.InputCount != 2 || result.Trace.StageDeduplication.OutputCount != 1 {
 		t.Fatalf("unexpected dedup trace: %+v", result.Trace.StageDeduplication)
-	}
-}
-
-func TestRetrievalScopeAndTopicFilter(t *testing.T) {
-	t.Parallel()
-
-	store := newIndexStoreForRetrievalTest(t)
-	addIndexedChunkForRetrievalTest(t, store, retrievalChunkFixture{DocID: "doc_topic_rag", ChunkID: "chunk_topic_rag", Scope: ScopeTopics, ScopeID: "rag", Title: "rag.md", Content: "topic rag", Embedding: []float32{1, 0}})
-	addIndexedChunkForRetrievalTest(t, store, retrievalChunkFixture{DocID: "doc_topic_system", ChunkID: "chunk_topic_system", Scope: ScopeTopics, ScopeID: "system", Title: "system.md", Content: "topic system", Embedding: []float32{1, 0}})
-
-	engine := NewRetrievalEngine(store, &stubEmbeddingProvider{vectors: map[string][]float32{"query": {1, 0}}})
-	engine.scoreThreshold = 0.01
-
-	result, err := engine.Search("", SearchConfig{LeadID: "lead_1", Query: "query", TopK: 10, IncludeTrace: true, TopicKeys: []string{"rag"}})
-	if err != nil {
-		t.Fatalf("search retrieval: %v", err)
-	}
-
-	if len(result.RetrievedChunks) != 1 {
-		t.Fatalf("expected 1 filtered topic chunk, got %d", len(result.RetrievedChunks))
-	}
-	for _, item := range result.RetrievedChunks {
-		if item.Source.Scope != string(ScopeTopics) || item.Source.ScopeID != "rag" {
-			t.Fatalf("unexpected scope after topic-only filtering: %+v", item.Source)
-		}
 	}
 }
 
@@ -99,7 +74,6 @@ func TestRetrievalReturnsCandidateAndFinalChunks(t *testing.T) {
 		Query:        "query",
 		TopK:         5,
 		IncludeTrace: true,
-		TopicKeys:    []string{"rag"},
 	})
 	if err != nil {
 		t.Fatalf("search retrieval: %v", err)
@@ -130,7 +104,7 @@ func TestRetrievalEmptyResult(t *testing.T) {
 	engine := NewRetrievalEngine(store, &stubEmbeddingProvider{vectors: map[string][]float32{"query": {1, 0}}})
 	engine.scoreThreshold = 0.95
 
-	result, err := engine.Search("", SearchConfig{Query: "query", TopK: 5, IncludeTrace: true, TopicKeys: []string{"rag"}})
+	result, err := engine.Search("", SearchConfig{Query: "query", TopK: 5, IncludeTrace: true})
 	if err != nil {
 		t.Fatalf("search retrieval: %v", err)
 	}
@@ -151,7 +125,7 @@ func TestRetrievalTraceContract(t *testing.T) {
 	engine := NewRetrievalEngine(store, &stubEmbeddingProvider{vectors: map[string][]float32{"query": {1, 0}}})
 	engine.scoreThreshold = 0.01
 
-	result, err := engine.Search("", SearchConfig{Query: "query", TopK: 1, IncludeTrace: true, TopicKeys: []string{"rag"}})
+	result, err := engine.Search("", SearchConfig{Query: "query", TopK: 1, IncludeTrace: true})
 	if err != nil {
 		t.Fatalf("search retrieval: %v", err)
 	}
@@ -180,7 +154,7 @@ func TestRetrievalScoreThresholdFilter(t *testing.T) {
 	engine := NewRetrievalEngine(store, &stubEmbeddingProvider{vectors: map[string][]float32{"query": {1, 0}}})
 	engine.scoreThreshold = 0.75
 
-	result, err := engine.Search("", SearchConfig{Query: "query", TopK: 5, IncludeTrace: true, TopicKeys: []string{"rag"}})
+	result, err := engine.Search("", SearchConfig{Query: "query", TopK: 5, IncludeTrace: true})
 	if err != nil {
 		t.Fatalf("search retrieval: %v", err)
 	}

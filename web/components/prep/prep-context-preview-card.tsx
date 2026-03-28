@@ -3,7 +3,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PrepLeadContextPreview } from "@/lib/prep-types";
 import { ContextSourceList } from "./context-source-list";
-import { SelectedPackChips } from "./selected-pack-chips";
 
 interface PrepContextPreviewCardProps {
   preview: PrepLeadContextPreview | null;
@@ -34,11 +33,6 @@ export function PrepContextPreviewCard({ preview, isLoading = false, error = nul
 
       <CardContent className="space-y-6">
         {error ? <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p> : null}
-
-        <section className="space-y-2">
-          <h3 className="text-sm font-medium">Topic Packs</h3>
-          {isLoading ? <Skeleton className="h-6 w-40" /> : <SelectedPackChips topicKeys={preview?.topicKeys || []} />}
-        </section>
 
         <section className="space-y-2">
           <h3 className="text-sm font-medium">来源清单</h3>

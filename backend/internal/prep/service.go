@@ -379,14 +379,9 @@ func (s *Service) CreateSession(ctx context.Context, lead model.Lead, input Crea
 	} else if inputLeadID != leadID {
 		return Session{}, &ValidationError{Field: "lead_id", Message: "lead_id does not match selected lead"}
 	}
-	if err := s.validateSessionTopicKeys(input.TopicKeys); err != nil {
-		return Session{}, err
-	}
-
 	generated, err := s.questionGen.GenerateWithContext(ctx, GenerationConfig{
 		Lead:            lead,
 		LeadID:          input.LeadID,
-		TopicKeys:       input.TopicKeys,
 		QuestionCount:   input.QuestionCount,
 		IncludeResume:   input.IncludeResume,
 		IncludeLeadDocs: input.IncludeLeadDocs,
@@ -429,14 +424,9 @@ func (s *Service) CreateSessionWithProgress(
 	} else if inputLeadID != leadID {
 		return Session{}, &ValidationError{Field: "lead_id", Message: "lead_id does not match selected lead"}
 	}
-	if err := s.validateSessionTopicKeys(input.TopicKeys); err != nil {
-		return Session{}, err
-	}
-
 	generated, err := s.questionGen.GenerateWithProgress(ctx, GenerationConfig{
 		Lead:            lead,
 		LeadID:          input.LeadID,
-		TopicKeys:       input.TopicKeys,
 		QuestionCount:   input.QuestionCount,
 		IncludeResume:   input.IncludeResume,
 		IncludeLeadDocs: input.IncludeLeadDocs,
@@ -482,7 +472,6 @@ func (s *Service) GenerateQuestions(ctx context.Context, lead model.Lead, input 
 	generated, err := s.questionGen.GenerateWithContext(ctx, GenerationConfig{
 		Lead:            lead,
 		LeadID:          input.LeadID,
-		TopicKeys:       input.TopicKeys,
 		QuestionCount:   input.QuestionCount,
 		IncludeResume:   input.IncludeResume,
 		IncludeLeadDocs: input.IncludeLeadDocs,
@@ -498,39 +487,6 @@ func (s *Service) GenerateQuestions(ctx context.Context, lead model.Lead, input 
 		trace = *generated.Session.GenerationTrace
 	}
 	return generated.Session.Questions, trace, generated.Session.Sources, nil
-}
-
-func (s *Service) validateSessionTopicKeys(topicKeys []string) error {
-	if len(topicKeys) == 0 {
-		return nil
-	}
-	if s.topicStore == nil {
-		return ErrTopicStoreUnavailable
-	}
-
-	available := make(map[string]struct{})
-	for _, item := range s.topicStore.List() {
-		key := strings.TrimSpace(item.Key)
-		if key == "" {
-			continue
-		}
-		available[key] = struct{}{}
-	}
-
-	missing := make([]string, 0)
-	for _, item := range topicKeys {
-		key := strings.TrimSpace(item)
-		if key == "" {
-			continue
-		}
-		if _, ok := available[key]; !ok {
-			missing = append(missing, key)
-		}
-	}
-	if len(missing) == 0 {
-		return nil
-	}
-	return &ValidationError{Field: "topic_keys", Message: fmt.Sprintf("unknown topic keys: %s", strings.Join(missing, ", "))}
 }
 
 func (s *Service) RebuildIndex(scope string, scopeID string) (*IndexRunSummary, error) {

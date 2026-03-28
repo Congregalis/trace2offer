@@ -53,7 +53,6 @@ export interface PrepLeadContextPreview {
   company: string;
   position: string;
   hasResume: boolean;
-  topicKeys: string[];
   sources: PrepContextSource[];
 }
 
@@ -118,7 +117,6 @@ export interface PrepIndexRebuildInput {
 export interface PrepRetrievalPreviewRequest {
   leadId?: string;
   query: string;
-  topicKeys?: string[];
   topK?: number;
   includeTrace?: boolean;
   includeResume?: boolean;
@@ -127,7 +125,6 @@ export interface PrepRetrievalPreviewRequest {
 
 export interface PrepRetrievalFilters {
   scope: PrepScope[];
-  topicKeys: string[];
 }
 
 export interface PrepRetrievalTrace {
@@ -190,7 +187,6 @@ export interface PrepAnswer {
 }
 
 export interface PrepSessionConfig {
-  topicKeys: string[];
   questionCount: number;
   includeResume: boolean;
   includeLeadDocs: boolean;
@@ -199,7 +195,6 @@ export interface PrepSessionConfig {
 export interface PrepGenerationTrace {
   inputSnapshot: {
     leadId: string;
-    topicKeys: string[];
     questionCount: number;
   };
   queryPlanning: {
@@ -263,7 +258,6 @@ export interface PrepSession {
 
 export interface PrepCreateSessionInput {
   leadId: string;
-  topicKeys: string[];
   questionCount: number;
   includeResume: boolean;
   includeLeadDocs: boolean;
