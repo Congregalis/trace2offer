@@ -101,7 +101,13 @@ func (p *Provider) Generate(ctx context.Context, request provider.Request) (prov
 		return provider.Response{}, fmt.Errorf("decode openai response: %w", err)
 	}
 
-	text := extractResponseText(parsed)
+	text := ""
+	if len(request.Tools) > 0 {
+		text = extractResponseFunctionArguments(parsed)
+	}
+	if strings.TrimSpace(text) == "" {
+		text = extractResponseText(parsed)
+	}
 	if text == "" {
 		return provider.Response{}, errors.New("openai response contains no text output")
 	}
@@ -131,9 +137,11 @@ func (p *Provider) GenerateStream(
 
 	reader := bufio.NewReader(httpResp.Body)
 	dataLines := make([]string, 0, 4)
-	var outputBuilder strings.Builder
+	var textBuilder strings.Builder
+	var functionArgsBuilder strings.Builder
 	var completed responsesResponse
 	hasCompleted := false
+	wantsFunctionOutput := len(request.Tools) > 0
 
 	emitData := func() error {
 		if len(dataLines) == 0 {
@@ -162,10 +170,29 @@ func (p *Provider) GenerateStream(
 		case "response.output_text.delta":
 			delta := event.Delta
 			if delta != "" {
-				outputBuilder.WriteString(delta)
+				textBuilder.WriteString(delta)
 				if onDelta != nil {
 					onDelta(delta)
 				}
+			}
+		case "response.function_call_arguments.delta":
+			delta := event.Delta
+			if delta != "" {
+				functionArgsBuilder.WriteString(delta)
+				if onDelta != nil {
+					onDelta(delta)
+				}
+			}
+		case "response.function_call_arguments.done":
+			if strings.TrimSpace(event.Arguments) != "" && functionArgsBuilder.Len() == 0 {
+				functionArgsBuilder.WriteString(event.Arguments)
+			}
+		case "response.output_item.done":
+			if event.Item != nil &&
+				strings.TrimSpace(event.Item.Type) == "function_call" &&
+				strings.TrimSpace(event.Item.Arguments) != "" &&
+				functionArgsBuilder.Len() == 0 {
+				functionArgsBuilder.WriteString(event.Item.Arguments)
 			}
 		case "response.completed":
 			if event.Response != nil {
@@ -200,9 +227,20 @@ func (p *Provider) GenerateStream(
 		return provider.Response{}, err
 	}
 
-	content := strings.TrimSpace(outputBuilder.String())
+	textContent := strings.TrimSpace(textBuilder.String())
+	functionContent := strings.TrimSpace(functionArgsBuilder.String())
+
+	content := textContent
+	if wantsFunctionOutput {
+		content = functionContent
+	}
 	if content == "" && hasCompleted {
-		content = extractResponseText(completed)
+		if wantsFunctionOutput {
+			content = extractResponseFunctionArguments(completed)
+		}
+		if strings.TrimSpace(content) == "" {
+			content = extractResponseText(completed)
+		}
 	}
 	if content == "" {
 		return provider.Response{}, errors.New("openai stream contains no text output")
@@ -219,6 +257,28 @@ func (p *Provider) buildResponsesRequest(request provider.Request, stream bool) 
 	payload := responsesRequest{Model: p.model, Stream: stream}
 	if strings.TrimSpace(request.Model) != "" {
 		payload.Model = strings.TrimSpace(request.Model)
+	}
+	if len(request.Tools) > 0 {
+		payload.Tools = make([]responsesTool, 0, len(request.Tools))
+		for _, tool := range request.Tools {
+			toolType := strings.TrimSpace(tool.Type)
+			if toolType == "" {
+				toolType = "function"
+			}
+			payload.Tools = append(payload.Tools, responsesTool{
+				Type:        toolType,
+				Name:        strings.TrimSpace(tool.Name),
+				Description: strings.TrimSpace(tool.Description),
+				Strict:      tool.Strict,
+				Parameters:  tool.Parameters,
+			})
+		}
+	}
+	if request.ToolChoice != nil {
+		payload.ToolChoice = &responsesToolChoice{
+			Type: strings.TrimSpace(request.ToolChoice.Type),
+			Name: strings.TrimSpace(request.ToolChoice.Name),
+		}
 	}
 
 	payload.Input = make([]responsesInputMessage, 0, len(request.Messages))
@@ -317,11 +377,26 @@ func extractResponseText(parsed responsesResponse) string {
 		return text
 	}
 	for _, output := range parsed.Output {
-		for _, content := range output.Content {
-			candidate := strings.TrimSpace(content.Text)
-			if candidate != "" {
-				return candidate
+		if strings.TrimSpace(output.Type) == "message" {
+			for _, content := range output.Content {
+				candidate := strings.TrimSpace(content.Text)
+				if candidate != "" {
+					return candidate
+				}
 			}
+		}
+	}
+	return ""
+}
+
+func extractResponseFunctionArguments(parsed responsesResponse) string {
+	for _, output := range parsed.Output {
+		if strings.TrimSpace(output.Type) != "function_call" {
+			continue
+		}
+		arguments := strings.TrimSpace(output.Arguments)
+		if arguments != "" {
+			return arguments
 		}
 	}
 	return ""
@@ -337,9 +412,24 @@ func inputContentTypeForRole(role string) string {
 }
 
 type responsesRequest struct {
-	Model  string                  `json:"model"`
-	Input  []responsesInputMessage `json:"input"`
-	Stream bool                    `json:"stream,omitempty"`
+	Model      string                  `json:"model"`
+	Input      []responsesInputMessage `json:"input"`
+	Tools      []responsesTool         `json:"tools,omitempty"`
+	ToolChoice *responsesToolChoice    `json:"tool_choice,omitempty"`
+	Stream     bool                    `json:"stream,omitempty"`
+}
+
+type responsesTool struct {
+	Type        string         `json:"type"`
+	Name        string         `json:"name,omitempty"`
+	Description string         `json:"description,omitempty"`
+	Strict      bool           `json:"strict,omitempty"`
+	Parameters  map[string]any `json:"parameters,omitempty"`
+}
+
+type responsesToolChoice struct {
+	Type string `json:"type"`
+	Name string `json:"name,omitempty"`
 }
 
 type responsesInputMessage struct {
@@ -353,12 +443,16 @@ type responsesInputContent struct {
 }
 
 type responsesResponse struct {
-	OutputText string `json:"output_text"`
-	Output     []struct {
-		Content []struct {
-			Text string `json:"text"`
-		} `json:"content"`
-	} `json:"output"`
+	OutputText string                `json:"output_text"`
+	Output     []responsesOutputItem `json:"output"`
+}
+
+type responsesOutputItem struct {
+	Type      string `json:"type"`
+	Arguments string `json:"arguments"`
+	Content   []struct {
+		Text string `json:"text"`
+	} `json:"content"`
 }
 
 type responsesErrorEnvelope struct {
@@ -368,10 +462,12 @@ type responsesErrorEnvelope struct {
 }
 
 type responsesStreamEvent struct {
-	Type     string             `json:"type"`
-	Delta    string             `json:"delta"`
-	Response *responsesResponse `json:"response"`
-	Error    struct {
+	Type      string               `json:"type"`
+	Delta     string               `json:"delta"`
+	Arguments string               `json:"arguments"`
+	Item      *responsesOutputItem `json:"item"`
+	Response  *responsesResponse   `json:"response"`
+	Error     struct {
 		Message string `json:"message"`
 	} `json:"error"`
 }

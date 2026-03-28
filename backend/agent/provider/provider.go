@@ -17,8 +17,23 @@ type Message struct {
 
 // Request is a model generation request.
 type Request struct {
-	Model    string
-	Messages []Message
+	Model      string
+	Messages   []Message
+	Tools      []Tool
+	ToolChoice *ToolChoice
+}
+
+type Tool struct {
+	Type        string
+	Name        string
+	Description string
+	Strict      bool
+	Parameters  map[string]any
+}
+
+type ToolChoice struct {
+	Type string
+	Name string
 }
 
 // Response is the raw model output.

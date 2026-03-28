@@ -72,7 +72,6 @@ func BuildQuestionGenerationPromptSections(input PromptBuildInput) QuestionPromp
 		}, "\n"),
 		OutputFormat: strings.Join([]string{
 			"Output Format:",
-			"```json",
 			"{",
 			"  \"questions\": [",
 			"    {",
@@ -84,7 +83,6 @@ func BuildQuestionGenerationPromptSections(input PromptBuildInput) QuestionPromp
 			"    }",
 			"  ]",
 			"}",
-			"```",
 		}, "\n"),
 	}
 }

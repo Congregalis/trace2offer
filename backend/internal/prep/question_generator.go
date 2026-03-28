@@ -30,6 +30,16 @@ type QuestionModelStreamer interface {
 	) (string, error)
 }
 
+type QuestionModelStructuredGenerator interface {
+	GenerateStructuredQuestions(
+		ctx context.Context,
+		systemPrompt string,
+		userPrompt string,
+		questionCount int,
+		onDelta func(string),
+	) (string, error)
+}
+
 type openAIProviderStreamer interface {
 	GenerateStream(ctx context.Context, request agentprovider.Request, onDelta func(string)) (agentprovider.Response, error)
 }
@@ -97,6 +107,51 @@ func (m *openAIQuestionModel) GenerateStream(
 			{Role: "user", Content: strings.TrimSpace(userPrompt)},
 		},
 	}, onDelta)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(response.Content), nil
+}
+
+func (m *openAIQuestionModel) GenerateStructuredQuestions(
+	ctx context.Context,
+	systemPrompt string,
+	userPrompt string,
+	questionCount int,
+	onDelta func(string),
+) (string, error) {
+	if m == nil || m.provider == nil {
+		return "", fmt.Errorf("question model provider is nil")
+	}
+	if questionCount <= 0 {
+		questionCount = defaultQuestionCount
+	}
+
+	request := agentprovider.Request{
+		Model: m.model,
+		Messages: []agentprovider.Message{
+			{Role: "system", Content: strings.TrimSpace(systemPrompt)},
+			{Role: "user", Content: strings.TrimSpace(userPrompt)},
+		},
+		Tools: []agentprovider.Tool{
+			buildInterviewQuestionsTool(questionCount),
+		},
+		ToolChoice: &agentprovider.ToolChoice{
+			Type: "function",
+			Name: "emit_interview_questions",
+		},
+	}
+
+	streamer, ok := m.provider.(openAIProviderStreamer)
+	if !ok {
+		response, err := m.provider.Generate(ctx, request)
+		if err != nil {
+			return "", err
+		}
+		return strings.TrimSpace(response.Content), nil
+	}
+
+	response, err := streamer.GenerateStream(ctx, request, onDelta)
 	if err != nil {
 		return "", err
 	}
@@ -348,7 +403,22 @@ func (g *QuestionGenerator) GenerateWithProgress(
 	})
 	if g.model != nil {
 		modelName = g.model.Name()
-		if streamer, ok := g.model.(QuestionModelStreamer); ok {
+		if structured, ok := g.model.(QuestionModelStructuredGenerator); ok {
+			output, err := structured.GenerateStructuredQuestions(ctx, promptSections.System, assembledPrompt, questionCount, func(delta string) {
+				generationDeltaCount++
+				g.emitProgress(reporter, GenerationProgressEvent{
+					Stage:   GenerationStageGeneration,
+					Status:  GenerationProgressProgress,
+					Message: "模型输出片段",
+					Delta:   delta,
+					Trace:   cloneGenerationTrace(trace),
+				})
+			})
+			if err != nil {
+				return nil, err
+			}
+			modelOutput = output
+		} else if streamer, ok := g.model.(QuestionModelStreamer); ok {
 			var streamedOutput strings.Builder
 			output, err := streamer.GenerateStream(ctx, promptSections.System, assembledPrompt, func(delta string) {
 				generationDeltaCount++
@@ -630,6 +700,58 @@ func buildRetrievalQueryPlannerPrompt(lead model.Lead, topicKeys []string, resum
 		"Job Description:",
 		limitPromptInput(jdText, 4000),
 	}, "\n")
+}
+
+func buildInterviewQuestionsTool(questionCount int) agentprovider.Tool {
+	if questionCount <= 0 {
+		questionCount = defaultQuestionCount
+	}
+	return agentprovider.Tool{
+		Type:        "function",
+		Name:        "emit_interview_questions",
+		Description: "Return interview questions in strict JSON arguments. Do not include markdown.",
+		Strict:      true,
+		Parameters: map[string]any{
+			"type":                 "object",
+			"additionalProperties": false,
+			"properties": map[string]any{
+				"questions": map[string]any{
+					"type":     "array",
+					"minItems": questionCount,
+					"maxItems": questionCount,
+					"items": map[string]any{
+						"type":                 "object",
+						"additionalProperties": false,
+						"properties": map[string]any{
+							"id": map[string]any{
+								"type": "integer",
+							},
+							"type": map[string]any{
+								"type": "string",
+							},
+							"content": map[string]any{
+								"type": "string",
+							},
+							"expected_points": map[string]any{
+								"type": "array",
+								"items": map[string]any{
+									"type": "string",
+								},
+							},
+							"context_sources": map[string]any{
+								"type": "array",
+								"items": map[string]any{
+									"type": "string",
+								},
+							},
+						},
+						"required": []string{"id", "type", "content", "expected_points", "context_sources"},
+					},
+				},
+			},
+			"required": []string{"questions"},
+		},
+	}
 }
 
 func parseRetrievalQueryPlannerOutput(raw string) string {
