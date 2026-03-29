@@ -141,6 +141,16 @@ func TestRetrievalTraceContract(t *testing.T) {
 	if result.Trace.StageReranking.Method == "" {
 		t.Fatal("expected reranking method populated")
 	}
+	if len(result.Filters.Scope) != 1 || result.Filters.Scope[0] != string(ScopeAll) {
+		t.Fatalf("expected filters.scope=['*'], got %+v", result.Filters.Scope)
+	}
+	scopeFiltered, ok := result.Trace.StageInitialRetrieval.Metadata["scope_filtered"].(bool)
+	if !ok {
+		t.Fatalf("expected bool scope_filtered metadata, got %+v", result.Trace.StageInitialRetrieval.Metadata["scope_filtered"])
+	}
+	if scopeFiltered {
+		t.Fatalf("expected scope_filtered=false for full-repo recall")
+	}
 }
 
 func TestRetrievalScoreThresholdFilter(t *testing.T) {

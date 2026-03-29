@@ -77,9 +77,7 @@ func (e *RetrievalEngine) Search(query string, config SearchConfig) (*SearchResu
 		return nil, err
 	}
 
-	filterScopes := scopesForSearch(normalized.LeadID)
-	filtered := filterByScope(scoredCandidates, filterScopes)
-	candidateScored := sortScoredDescending(filtered)
+	candidateScored := sortScoredDescending(scoredCandidates)
 	candidateChunks := toRetrievedChunks(candidateScored, "candidate recalled by cosine similarity", 0)
 	deduped := deduplicateByContentHash(candidateScored)
 	reranked := rerankAndLimit(deduped, normalized.TopK, e.scoreThreshold)
@@ -95,7 +93,7 @@ func (e *RetrievalEngine) Search(query string, config SearchConfig) (*SearchResu
 		Query:           normalized.Query,
 		NormalizedQuery: normalizedQuery,
 		Filters: SearchFilters{
-			Scope: scopeNames(filterScopes),
+			Scope: []string{string(ScopeAll)},
 		},
 		CandidateChunks: candidateChunks,
 		RetrievedChunks: retrievedChunks,
@@ -118,12 +116,12 @@ func (e *RetrievalEngine) Search(query string, config SearchConfig) (*SearchResu
 				InputCount:  len(allChunks),
 				OutputCount: len(candidateScored),
 				Metadata: map[string]interface{}{
-					"scopes":            scopeNames(filterScopes),
+					"scopes":            []string{string(ScopeAll)},
 					"lead_id":           normalized.LeadID,
 					"company_slug":      normalized.CompanySlug,
 					"include_resume":    normalized.IncludeResume,
 					"include_lead_docs": normalized.IncludeLeadDocs,
-					"scope_filtered":    true,
+					"scope_filtered":    false,
 				},
 			},
 			StageDeduplication: TraceStage{
@@ -272,30 +270,6 @@ func (e *RetrievalEngine) initialRetrieval(query string, chunks []retrievalChunk
 		})
 	}
 	return scored, nil
-}
-
-func scopesForSearch(leadID string) []Scope {
-	_ = leadID
-	return []Scope{ScopeTopics}
-}
-
-func filterByScope(scored []scoredChunk, scopes []Scope) []scoredChunk {
-	if len(scored) == 0 {
-		return []scoredChunk{}
-	}
-	allowedScopes := make(map[Scope]struct{}, len(scopes))
-	for _, scope := range scopes {
-		allowedScopes[scope] = struct{}{}
-	}
-
-	result := make([]scoredChunk, 0, len(scored))
-	for _, item := range scored {
-		if _, ok := allowedScopes[item.chunk.Scope]; !ok {
-			continue
-		}
-		result = append(result, item)
-	}
-	return result
 }
 
 func sortScoredDescending(scored []scoredChunk) []scoredChunk {
