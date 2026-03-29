@@ -659,6 +659,67 @@ export async function fetchPrepLeadContextPreview(leadId: string, signal?: Abort
   return normalizeContextPreview(payload.data);
 }
 
+export async function listPrepDocuments(signal?: AbortSignal): Promise<PrepKnowledgeDocument[]> {
+  const response = await fetch(getAPIURL("/api/prep/documents"), {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+    signal,
+  });
+  if (!response.ok) {
+    throw await parseAPIError(response, "加载文档失败");
+  }
+  const payload = (await response.json()) as APIListPayload<APIKnowledgeDocument>;
+  const documents = Array.isArray(payload.data) ? payload.data : [];
+  return documents.map(normalizeDocument);
+}
+
+export async function createPrepDocument(input: PrepKnowledgeDocumentCreateInput): Promise<PrepKnowledgeDocument> {
+  const response = await fetch(getAPIURL("/api/prep/documents"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      filename: (input.filename || "").trim(),
+      content: input.content || "",
+    }),
+  });
+  if (!response.ok) {
+    throw await parseAPIError(response, "创建文档失败");
+  }
+  const payload = (await response.json()) as APISinglePayload<APIKnowledgeDocument>;
+  if (!payload.data) {
+    throw new Error("创建文档响应缺少 data");
+  }
+  return normalizeDocument(payload.data);
+}
+
+export async function updatePrepDocument(filename: string, input: PrepKnowledgeDocumentUpdateInput): Promise<PrepKnowledgeDocument> {
+  const response = await fetch(getAPIURL(`/api/prep/documents/${encodeSegment(filename)}`), {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      content: input.content || "",
+    }),
+  });
+  if (!response.ok) {
+    throw await parseAPIError(response, "更新文档失败");
+  }
+  const payload = (await response.json()) as APISinglePayload<APIKnowledgeDocument>;
+  if (!payload.data) {
+    throw new Error("更新文档响应缺少 data");
+  }
+  return normalizeDocument(payload.data);
+}
+
+export async function deletePrepDocument(filename: string): Promise<void> {
+  const response = await fetch(getAPIURL(`/api/prep/documents/${encodeSegment(filename)}`), {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+  });
+  if (!response.ok) {
+    throw await parseAPIError(response, "删除文档失败");
+  }
+}
+
 export async function rebuildPrepIndex(input: PrepIndexRebuildInput): Promise<PrepIndexRunSummary> {
   const response = await fetch(getAPIURL("/api/prep/index/rebuild"), {
     method: "POST",

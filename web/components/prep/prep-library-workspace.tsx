@@ -7,16 +7,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  createPrepKnowledgeDocument,
-  createPrepTopic,
+  createPrepDocument,
   fetchPrepIndexStatus,
   fetchPrepMeta,
+  listPrepDocuments,
   listPrepIndexChunks,
   listPrepIndexDocuments,
-  listPrepKnowledgeDocuments,
-  listPrepTopics,
   rebuildPrepIndex,
-  updatePrepKnowledgeDocument,
+  updatePrepDocument,
 } from "@/lib/prep-api";
 import {
   DEFAULT_PREP_META,
@@ -26,7 +24,6 @@ import {
   PrepIndexStatus,
   PrepKnowledgeDocument,
   PrepMeta,
-  PrepTopic,
 } from "@/lib/prep-types";
 import { IndexRunSummary } from "./index-run-summary";
 import { IndexStatusCard } from "./index-status-card";
@@ -67,31 +64,42 @@ export function PrepLibraryWorkspace() {
   const [isIndexDataLoading, setIsIndexDataLoading] = useState(false);
   const [indexDataError, setIndexDataError] = useState<string | null>(null);
 
-  const [topics, setTopics] = useState<PrepTopic[]>([]);
-  const [isTopicsLoading, setIsTopicsLoading] = useState(false);
-  const [isTopicCreating, setIsTopicCreating] = useState(false);
-  const [topicError, setTopicError] = useState<string | null>(null);
-  const [activeTopicKey, setActiveTopicKey] = useState("");
-  const [newTopicKey, setNewTopicKey] = useState("");
-  const [newTopicName, setNewTopicName] = useState("");
+  const [documents, setDocuments] = useState<PrepKnowledgeDocument[]>([]);
+  const [isDocumentsLoading, setIsDocumentsLoading] = useState(false);
+  const [isDocumentSaving, setIsDocumentSaving] = useState(false);
+  const [documentError, setDocumentError] = useState<string | null>(null);
+  const [documentMessage, setDocumentMessage] = useState<string | null>(null);
+  const [documentFilename, setDocumentFilename] = useState("");
+  const [documentContent, setDocumentContent] = useState("");
 
-  const [knowledgeDocuments, setKnowledgeDocuments] = useState<PrepKnowledgeDocument[]>([]);
-  const [isKnowledgeLoading, setIsKnowledgeLoading] = useState(false);
-  const [isKnowledgeSaving, setIsKnowledgeSaving] = useState(false);
-  const [knowledgeError, setKnowledgeError] = useState<string | null>(null);
-  const [knowledgeMessage, setKnowledgeMessage] = useState<string | null>(null);
-  const [knowledgeFilename, setKnowledgeFilename] = useState("");
-  const [knowledgeContent, setKnowledgeContent] = useState("");
+  const refreshDocuments = useCallback((signal?: AbortSignal) => {
+    setIsDocumentsLoading(true);
+    setDocumentError(null);
+    return listPrepDocuments(signal)
+      .then((items) => {
+        setDocuments(items);
+      })
+      .catch((error: unknown) => {
+        if (isAbortError(error)) {
+          return;
+        }
+        const message = error instanceof Error && error.message ? error.message : "加载文档失败";
+        setDocumentError(message);
+      })
+      .finally(() => {
+        setIsDocumentsLoading(false);
+      });
+  }, []);
 
   const refreshIndexedData = useCallback((signal?: AbortSignal, preferredDocumentIDRaw = "") => {
     setIsIndexDataLoading(true);
     setIndexDataError(null);
 
     return listPrepIndexDocuments(signal)
-      .then(async (documents) => {
-        setIndexDocuments(documents);
+      .then(async (indexed) => {
+        setIndexDocuments(indexed);
         const preferredDocumentID = preferredDocumentIDRaw.trim();
-        const nextDocumentID = preferredDocumentID && documents.some((item) => item.id === preferredDocumentID) ? preferredDocumentID : documents[0]?.id || "";
+        const nextDocumentID = preferredDocumentID && indexed.some((item) => item.id === preferredDocumentID) ? preferredDocumentID : indexed[0]?.id || "";
         setSelectedIndexedDocumentID(nextDocumentID);
         if (!nextDocumentID) {
           setIndexChunks([]);
@@ -136,7 +144,7 @@ export function PrepLibraryWorkspace() {
     return () => {
       controller.abort();
     };
-  }, [refreshIndexedData]);
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -155,75 +163,13 @@ export function PrepLibraryWorkspace() {
           setIndexError(message);
         }),
       refreshIndexedData(controller.signal),
+      refreshDocuments(controller.signal),
     ]);
 
     return () => {
       controller.abort();
     };
-  }, []);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    setIsTopicsLoading(true);
-    setTopicError(null);
-
-    void listPrepTopics(controller.signal)
-      .then((items) => {
-        setTopics(items);
-        setActiveTopicKey((previous) => {
-          if (previous && items.some((item) => item.key === previous)) {
-            return previous;
-          }
-          return items[0]?.key || "";
-        });
-      })
-      .catch((error: unknown) => {
-        if (isAbortError(error)) {
-          return;
-        }
-        const message = error instanceof Error && error.message ? error.message : "加载 topic 失败";
-        setTopicError(message);
-      })
-      .finally(() => {
-        setIsTopicsLoading(false);
-      });
-
-    return () => {
-      controller.abort();
-    };
-  }, []);
-
-  useEffect(() => {
-    const topicKey = activeTopicKey.trim();
-    if (!topicKey) {
-      setKnowledgeDocuments([]);
-      setIsKnowledgeLoading(false);
-      return;
-    }
-
-    const controller = new AbortController();
-    setIsKnowledgeLoading(true);
-    setKnowledgeError(null);
-
-    void listPrepKnowledgeDocuments("topics", topicKey, controller.signal)
-      .then((documents) => {
-        setKnowledgeDocuments(documents);
-      })
-      .catch((error: unknown) => {
-        if (isAbortError(error)) {
-          return;
-        }
-        const message = error instanceof Error && error.message ? error.message : "加载资料文档失败";
-        setKnowledgeError(message);
-      })
-      .finally(() => {
-        setIsKnowledgeLoading(false);
-      });
-
-    return () => {
-      controller.abort();
-    };
-  }, [activeTopicKey]);
+  }, [refreshDocuments, refreshIndexedData]);
 
   useEffect(() => {
     const documentID = selectedIndexedDocumentID.trim();
@@ -278,38 +224,6 @@ export function PrepLibraryWorkspace() {
       });
   };
 
-  const handleCreateTopic = () => {
-    const key = newTopicKey.trim();
-    const name = newTopicName.trim();
-    if (!key || !name) {
-      setTopicError("请填写 topic key 和 topic 名称。");
-      return;
-    }
-
-    setIsTopicCreating(true);
-    setTopicError(null);
-
-    void createPrepTopic({
-      key,
-      name,
-      description: "",
-    })
-      .then(async (created) => {
-        const items = await listPrepTopics();
-        setTopics(items);
-        setActiveTopicKey(created.key || items[0]?.key || "");
-        setNewTopicKey("");
-        setNewTopicName("");
-      })
-      .catch((error: unknown) => {
-        const message = error instanceof Error && error.message ? error.message : "创建 topic 失败";
-        setTopicError(message);
-      })
-      .finally(() => {
-        setIsTopicCreating(false);
-      });
-  };
-
   const handleUploadMarkdownFile = (event: ChangeEvent<HTMLInputElement>) => {
     const selected = event.target.files?.[0];
     if (!selected) {
@@ -319,65 +233,58 @@ export function PrepLibraryWorkspace() {
       .text()
       .then((content) => {
         const rawName = selected.name.replace(/\.md$/i, "");
-        setKnowledgeFilename(rawName);
-        setKnowledgeContent(content);
-        setKnowledgeMessage(`已读取文件：${selected.name}`);
+        setDocumentFilename(rawName);
+        setDocumentContent(content);
+        setDocumentMessage(`已读取文件：${selected.name}`);
       })
       .catch(() => {
-        setKnowledgeError("读取上传文件失败，请重试。");
+        setDocumentError("读取上传文件失败，请重试。");
       })
       .finally(() => {
         event.target.value = "";
       });
   };
 
-  const handleSelectKnowledgeDocument = (document: PrepKnowledgeDocument) => {
-    setKnowledgeFilename(document.filename);
-    setKnowledgeContent(document.content);
-    setKnowledgeMessage(`已载入 ${document.filename}，可直接修改并保存。`);
-    setKnowledgeError(null);
+  const handleSelectDocument = (document: PrepKnowledgeDocument) => {
+    setDocumentFilename(document.filename);
+    setDocumentContent(document.content);
+    setDocumentMessage(`已载入 ${document.filename}，可直接修改并保存。`);
+    setDocumentError(null);
   };
 
-  const handleSaveKnowledgeDocument = () => {
-    const topicKey = activeTopicKey.trim();
-    if (!topicKey) {
-      setKnowledgeError("请先选择一个 topic。");
-      return;
-    }
-
-    const filename = toMarkdownFilename(knowledgeFilename);
-    const content = knowledgeContent;
+  const handleSaveDocument = () => {
+    const filename = toMarkdownFilename(documentFilename);
+    const content = documentContent;
     if (!filename) {
-      setKnowledgeError("请填写文件名。");
+      setDocumentError("请填写文件名。");
       return;
     }
     if (!content.trim()) {
-      setKnowledgeError("内容为空，至少输入一点文字。");
+      setDocumentError("内容为空，至少输入一点文字。");
       return;
     }
 
-    setIsKnowledgeSaving(true);
-    setKnowledgeError(null);
-    setKnowledgeMessage(null);
+    setIsDocumentSaving(true);
+    setDocumentError(null);
+    setDocumentMessage(null);
 
-    const existing = knowledgeDocuments.find((item) => item.filename === filename);
+    const existing = documents.find((item) => item.filename === filename);
     const savePromise = existing
-      ? updatePrepKnowledgeDocument("topics", topicKey, filename, { content })
-      : createPrepKnowledgeDocument("topics", topicKey, { filename, content });
+      ? updatePrepDocument(filename, { content })
+      : createPrepDocument({ filename, content });
 
     void savePromise
-      .then(() => listPrepKnowledgeDocuments("topics", topicKey))
-      .then((documents) => {
-        setKnowledgeDocuments(documents);
-        setKnowledgeFilename(filename);
-        setKnowledgeMessage(existing ? "资料已覆盖更新。" : "资料已创建。");
+      .then(() => refreshDocuments())
+      .then(() => {
+        setDocumentFilename(filename);
+        setDocumentMessage(existing ? "文档已覆盖更新。" : "文档已创建。");
       })
       .catch((error: unknown) => {
-        const message = error instanceof Error && error.message ? error.message : "保存资料失败";
-        setKnowledgeError(message);
+        const message = error instanceof Error && error.message ? error.message : "保存文档失败";
+        setDocumentError(message);
       })
       .finally(() => {
-        setIsKnowledgeSaving(false);
+        setIsDocumentSaving(false);
       });
   };
 
@@ -385,7 +292,7 @@ export function PrepLibraryWorkspace() {
     <div className="space-y-4">
       <header className="space-y-2">
         <div className="flex flex-wrap items-center gap-2">
-          <h2 className="text-lg font-semibold tracking-tight">资料库</h2>
+          <h2 className="text-lg font-semibold tracking-tight">文档仓库</h2>
           {isMetaLoading ? <Badge variant="secondary">加载配置中</Badge> : null}
           {!isMetaLoading && meta.enabled ? <Badge variant="secondary">模块已启用</Badge> : null}
         </div>
@@ -397,81 +304,50 @@ export function PrepLibraryWorkspace() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Topic 资料库</CardTitle>
-          <CardDescription>先创建 topic，再往 topic 下粘贴文本或上传 `.md`。</CardDescription>
+          <CardTitle className="text-base">文档管理</CardTitle>
+          <CardDescription>直接上传或粘贴文档，不需要预分类。</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="grid gap-2 sm:grid-cols-[minmax(0,160px)_minmax(0,1fr)_auto]">
-            <Input value={newTopicKey} onChange={(event) => setNewTopicKey(event.target.value)} placeholder="topic key" disabled={isTopicCreating} />
-            <Input value={newTopicName} onChange={(event) => setNewTopicName(event.target.value)} placeholder="topic 名称" disabled={isTopicCreating} />
-            <Button type="button" onClick={handleCreateTopic} disabled={isTopicCreating}>
-              {isTopicCreating ? "创建中..." : "创建 Topic"}
-            </Button>
-          </div>
-          {topicError ? <p className="text-sm text-destructive">{topicError}</p> : null}
-
-          <div className="grid gap-2">
-            <p className="text-sm font-medium">选择 Topic</p>
-            <div className="flex flex-wrap gap-2">
-              {isTopicsLoading ? <p className="text-sm text-muted-foreground">加载 topics...</p> : null}
-              {!isTopicsLoading && topics.length === 0 ? <p className="text-sm text-muted-foreground">还没有 topic，先创建一个。</p> : null}
-              {!isTopicsLoading
-                ? topics.map((topic) => (
-                    <Button
-                      key={topic.key}
-                      type="button"
-                      size="sm"
-                      variant={topic.key === activeTopicKey ? "default" : "outline"}
-                      onClick={() => setActiveTopicKey(topic.key)}
-                      disabled={isTopicCreating}
-                    >
-                      {topic.key}
-                    </Button>
-                  ))
-                : null}
-            </div>
-          </div>
-
           <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
             <Input
-              value={knowledgeFilename}
-              onChange={(event) => setKnowledgeFilename(event.target.value)}
+              value={documentFilename}
+              onChange={(event) => setDocumentFilename(event.target.value)}
               placeholder="文件名（例如：system-design-notes）"
-              disabled={!activeTopicKey.trim() || isKnowledgeSaving}
+              disabled={isDocumentSaving}
             />
-            <Input type="file" accept=".md,text/markdown,text/plain" onChange={handleUploadMarkdownFile} disabled={!activeTopicKey.trim() || isKnowledgeSaving} />
+            <Input type="file" accept=".md,text/markdown,text/plain" onChange={handleUploadMarkdownFile} disabled={isDocumentSaving} />
           </div>
 
           <Textarea
-            value={knowledgeContent}
-            onChange={(event) => setKnowledgeContent(event.target.value)}
-            placeholder="直接粘贴资料文本，支持 Markdown。"
+            value={documentContent}
+            onChange={(event) => setDocumentContent(event.target.value)}
+            placeholder="直接粘贴文档内容，支持 Markdown。"
             className="min-h-[180px]"
-            disabled={!activeTopicKey.trim() || isKnowledgeSaving}
+            disabled={isDocumentSaving}
           />
 
           <div className="flex items-center gap-3">
-            <Button type="button" onClick={handleSaveKnowledgeDocument} disabled={!activeTopicKey.trim() || isKnowledgeSaving}>
-              {isKnowledgeSaving ? "保存中..." : "保存资料"}
+            <Button type="button" onClick={handleSaveDocument} disabled={isDocumentSaving}>
+              {isDocumentSaving ? "保存中..." : "保存文档"}
             </Button>
-            {knowledgeMessage ? <p className="text-sm text-emerald-600">{knowledgeMessage}</p> : null}
-            {knowledgeError ? <p className="text-sm text-destructive">{knowledgeError}</p> : null}
+            {documentMessage ? <p className="text-sm text-emerald-600">{documentMessage}</p> : null}
+            {documentError ? <p className="text-sm text-destructive">{documentError}</p> : null}
           </div>
 
           <div className="space-y-2">
-            <p className="text-sm font-medium">已保存文档（{knowledgeDocuments.length}）</p>
-            {isKnowledgeLoading ? <p className="text-sm text-muted-foreground">文档加载中...</p> : null}
-            {!isKnowledgeLoading && knowledgeDocuments.length === 0 ? <p className="text-sm text-muted-foreground">当前 topic 还没有资料文档。</p> : null}
-            {!isKnowledgeLoading ? (
+            <p className="text-sm font-medium">已保存文档（{documents.length}）</p>
+            {isDocumentsLoading ? <p className="text-sm text-muted-foreground">文档加载中...</p> : null}
+            {!isDocumentsLoading && documents.length === 0 ? <p className="text-sm text-muted-foreground">当前还没有文档。</p> : null}
+            {!isDocumentsLoading ? (
               <div className="flex flex-wrap gap-2">
-                {knowledgeDocuments.map((document) => (
+                {documents.map((document) => (
                   <Button
-                    key={document.filename}
+                    key={`${document.scope}/${document.scopeId}/${document.filename}`}
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={() => handleSelectKnowledgeDocument(document)}
-                    disabled={isKnowledgeSaving}
+                    onClick={() => handleSelectDocument(document)}
+                    disabled={isDocumentSaving}
                   >
                     {document.filename}
                   </Button>
@@ -505,7 +381,7 @@ export function PrepLibraryWorkspace() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">索引内容（Docs / Chunks）</CardTitle>
-          <CardDescription>这里展示 sqlite 里的真实索引数据，方便你排查召回命中。</CardDescription>
+          <CardDescription>这里展示 sqlite 里的真实索引数据，方便排查召回命中。</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex items-center gap-3">

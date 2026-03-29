@@ -117,49 +117,9 @@ func TestLeadAndChatAPI(t *testing.T) {
 		t.Fatalf("expected 1 supported scope, got %d", len(prepMetaPayload.Data.SupportedScopes))
 	}
 
-	resp = doJSONRequest(t, router, http.MethodGet, "/api/prep/topics", nil)
+	resp = doJSONRequest(t, router, http.MethodGet, "/api/prep/documents", nil)
 	if resp.Code != http.StatusOK {
-		t.Fatalf("GET /api/prep/topics status=%d body=%s", resp.Code, resp.Body.String())
-	}
-	var topicListPayload struct {
-		Data []prep.Topic `json:"data"`
-	}
-	decodeJSONBody(t, resp, &topicListPayload)
-	if len(topicListPayload.Data) != 0 {
-		t.Fatalf("expected empty prep topics initially, got %d", len(topicListPayload.Data))
-	}
-
-	resp = doJSONRequest(t, router, http.MethodPost, "/api/prep/topics", map[string]any{
-		"key":         "rag",
-		"name":        "RAG",
-		"description": "检索增强生成",
-	})
-	if resp.Code != http.StatusCreated {
-		t.Fatalf("POST /api/prep/topics status=%d body=%s", resp.Code, resp.Body.String())
-	}
-
-	var topicPayload struct {
-		Data prep.Topic `json:"data"`
-	}
-	decodeJSONBody(t, resp, &topicPayload)
-	if topicPayload.Data.Key != "rag" {
-		t.Fatalf("expected topic key rag, got %q", topicPayload.Data.Key)
-	}
-
-	resp = doJSONRequest(t, router, http.MethodPatch, "/api/prep/topics/rag", map[string]any{
-		"description": "RAG + retrieval strategy",
-	})
-	if resp.Code != http.StatusOK {
-		t.Fatalf("PATCH /api/prep/topics/:key status=%d body=%s", resp.Code, resp.Body.String())
-	}
-	decodeJSONBody(t, resp, &topicPayload)
-	if topicPayload.Data.Description != "RAG + retrieval strategy" {
-		t.Fatalf("expected updated topic description, got %q", topicPayload.Data.Description)
-	}
-
-	resp = doJSONRequest(t, router, http.MethodGet, "/api/prep/knowledge/topics/rag/documents", nil)
-	if resp.Code != http.StatusOK {
-		t.Fatalf("GET /api/prep/knowledge/:scope/:scope_id/documents status=%d body=%s", resp.Code, resp.Body.String())
+		t.Fatalf("GET /api/prep/documents status=%d body=%s", resp.Code, resp.Body.String())
 	}
 	var documentListPayload struct {
 		Data []prep.KnowledgeDocument `json:"data"`
@@ -169,12 +129,12 @@ func TestLeadAndChatAPI(t *testing.T) {
 		t.Fatalf("expected empty prep documents initially, got %d", len(documentListPayload.Data))
 	}
 
-	resp = doJSONRequest(t, router, http.MethodPost, "/api/prep/knowledge/topics/rag/documents", map[string]any{
+	resp = doJSONRequest(t, router, http.MethodPost, "/api/prep/documents", map[string]any{
 		"filename": "overview",
 		"content":  "# RAG\n\nv1",
 	})
 	if resp.Code != http.StatusCreated {
-		t.Fatalf("POST /api/prep/knowledge/:scope/:scope_id/documents status=%d body=%s", resp.Code, resp.Body.String())
+		t.Fatalf("POST /api/prep/documents status=%d body=%s", resp.Code, resp.Body.String())
 	}
 	var documentPayload struct {
 		Data prep.KnowledgeDocument `json:"data"`
@@ -184,20 +144,20 @@ func TestLeadAndChatAPI(t *testing.T) {
 		t.Fatalf("expected created filename overview.md, got %q", documentPayload.Data.Filename)
 	}
 
-	resp = doJSONRequest(t, router, http.MethodPut, "/api/prep/knowledge/topics/rag/documents/overview.md", map[string]any{
+	resp = doJSONRequest(t, router, http.MethodPut, "/api/prep/documents/overview.md", map[string]any{
 		"content": "# RAG\n\nupdated",
 	})
 	if resp.Code != http.StatusOK {
-		t.Fatalf("PUT /api/prep/knowledge/:scope/:scope_id/documents/:filename status=%d body=%s", resp.Code, resp.Body.String())
+		t.Fatalf("PUT /api/prep/documents/:filename status=%d body=%s", resp.Code, resp.Body.String())
 	}
 	decodeJSONBody(t, resp, &documentPayload)
 	if documentPayload.Data.Content != "# RAG\n\nupdated" {
 		t.Fatalf("expected updated document content, got %q", documentPayload.Data.Content)
 	}
 
-	resp = doJSONRequest(t, router, http.MethodGet, "/api/prep/knowledge/topics/rag/documents", nil)
+	resp = doJSONRequest(t, router, http.MethodGet, "/api/prep/documents", nil)
 	if resp.Code != http.StatusOK {
-		t.Fatalf("GET /api/prep/knowledge/:scope/:scope_id/documents status=%d body=%s", resp.Code, resp.Body.String())
+		t.Fatalf("GET /api/prep/documents status=%d body=%s", resp.Code, resp.Body.String())
 	}
 	decodeJSONBody(t, resp, &documentListPayload)
 	if len(documentListPayload.Data) != 1 {
@@ -208,8 +168,7 @@ func TestLeadAndChatAPI(t *testing.T) {
 	}
 
 	resp = doJSONRequest(t, router, http.MethodPost, "/api/prep/index/rebuild", map[string]any{
-		"scope":    "topics",
-		"scope_id": "rag",
+		"scope": "*",
 	})
 	if resp.Code != http.StatusOK {
 		t.Fatalf("POST /api/prep/index/rebuild status=%d body=%s", resp.Code, resp.Body.String())
@@ -341,6 +300,9 @@ func TestLeadAndChatAPI(t *testing.T) {
 	}
 	if !hasPrepContextSource(contextPreviewPayload.Data.Sources, "lead", "jd_text", "JD 原文") {
 		t.Fatalf("expected jd source in context preview, got %+v", contextPreviewPayload.Data.Sources)
+	}
+	if !hasPrepContextSource(contextPreviewPayload.Data.Sources, "library", "markdown", "overview.md") {
+		t.Fatalf("expected library source in context preview, got %+v", contextPreviewPayload.Data.Sources)
 	}
 	resp = doJSONRequest(t, router, http.MethodPost, "/api/prep/retrieval/preview", map[string]any{
 		"lead_id":       leadID,
@@ -483,14 +445,9 @@ func TestLeadAndChatAPI(t *testing.T) {
 		t.Fatalf("PUT /api/prep/sessions/:session_id/draft-answers missing status=%d body=%s", resp.Code, resp.Body.String())
 	}
 
-	resp = doJSONRequest(t, router, http.MethodDelete, "/api/prep/knowledge/topics/rag/documents/overview.md", nil)
+	resp = doJSONRequest(t, router, http.MethodDelete, "/api/prep/documents/overview.md", nil)
 	if resp.Code != http.StatusNoContent {
-		t.Fatalf("DELETE /api/prep/knowledge/:scope/:scope_id/documents/:filename status=%d body=%s", resp.Code, resp.Body.String())
-	}
-
-	resp = doJSONRequest(t, router, http.MethodDelete, "/api/prep/topics/rag", nil)
-	if resp.Code != http.StatusNoContent {
-		t.Fatalf("DELETE /api/prep/topics/:key status=%d body=%s", resp.Code, resp.Body.String())
+		t.Fatalf("DELETE /api/prep/documents/:filename status=%d body=%s", resp.Code, resp.Body.String())
 	}
 
 	putInput := model.LeadMutationInput{
@@ -1024,8 +981,8 @@ func TestPrepEndpointsReturnConfigErrorWhenHFUnavailable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("init prep service: %v", err)
 	}
-	if _, err := prepService.CreateTopic(prep.TopicCreateInput{Key: "rag", Name: "RAG", Description: "retrieval"}); err != nil {
-		t.Fatalf("create prep topic: %v", err)
+	if _, err := prepService.CreateDocument(prep.KnowledgeDocumentCreateInput{Filename: "rag", Content: "retrieval"}); err != nil {
+		t.Fatalf("create prep document: %v", err)
 	}
 
 	leadList := leadStore.List()

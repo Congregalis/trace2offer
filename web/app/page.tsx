@@ -67,7 +67,7 @@ export default function HomePage() {
                   value="library"
                   className="relative z-10 rounded-full border-none bg-transparent px-4 text-muted-foreground transition-colors duration-300 ease-[var(--ease-fluid)] data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none"
                 >
-                  资料库
+                  文档仓库
                 </TabsTrigger>
                 <TabsTrigger
                   value="dashboard"

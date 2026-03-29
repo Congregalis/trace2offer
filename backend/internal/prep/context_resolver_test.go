@@ -13,18 +13,11 @@ func TestContextResolverResolveAggregatesSources(t *testing.T) {
 
 	service, dataRoot := newPrepServiceForContextTest(t)
 
-	if _, err := service.CreateTopic(TopicCreateInput{
-		Key:         "rag",
-		Name:        "RAG",
-		Description: "检索增强生成",
+	if _, err := service.CreateKnowledgeDocument(string(KnowledgeLibraryScope), KnowledgeLibraryScopeID, KnowledgeDocumentCreateInput{
+		Filename: "global-overview",
+		Content:  "# Global",
 	}); err != nil {
-		t.Fatalf("create topic: %v", err)
-	}
-	if _, err := service.CreateKnowledgeDocument("topics", "rag", KnowledgeDocumentCreateInput{
-		Filename: "overview",
-		Content:  "# RAG",
-	}); err != nil {
-		t.Fatalf("create topic doc: %v", err)
+		t.Fatalf("create library doc: %v", err)
 	}
 
 	writeFileForContextTest(t, filepath.Join(dataRoot, "resume", "current.md"), "# Resume\n\nGo engineer")
@@ -45,8 +38,8 @@ func TestContextResolverResolveAggregatesSources(t *testing.T) {
 	if !contextSourceExists(preview.Sources, "lead", "jd_text", "JD 原文") {
 		t.Fatalf("expected jd source included, got %+v", preview.Sources)
 	}
-	if !contextSourceExists(preview.Sources, "topic", "markdown", "rag/overview.md") {
-		t.Fatalf("expected topic doc source included, got %+v", preview.Sources)
+	if !contextSourceExists(preview.Sources, "library", "markdown", "global-overview.md") {
+		t.Fatalf("expected library doc source included, got %+v", preview.Sources)
 	}
 }
 
@@ -87,12 +80,12 @@ func TestContextResolverResolveWithoutResume(t *testing.T) {
 	}
 }
 
-func TestContextResolverResolveWithEmptyTopics(t *testing.T) {
+func TestContextResolverResolveWithEmptyLibrary(t *testing.T) {
 	t.Parallel()
 
 	service, _ := newPrepServiceForContextTest(t)
 	preview, err := service.GetLeadContextPreview(model.Lead{
-		ID:       "lead_topic_empty",
+		ID:       "lead_library_empty",
 		Company:  "OpenAI",
 		Position: "Agent Engineer",
 		JDText:   "JD content",
@@ -100,8 +93,8 @@ func TestContextResolverResolveWithEmptyTopics(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get lead context preview: %v", err)
 	}
-	if contextSourceExistsByScope(preview.Sources, "topic") {
-		t.Fatalf("expected no topic sources when topics empty, got %+v", preview.Sources)
+	if contextSourceExistsByScope(preview.Sources, "library") {
+		t.Fatalf("expected no library sources when library empty, got %+v", preview.Sources)
 	}
 }
 

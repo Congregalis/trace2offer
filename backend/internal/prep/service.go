@@ -120,7 +120,7 @@ func NewService(config Config, options ...ServiceOption) (*Service, error) {
 		return nil, err
 	}
 	service.sessionStore = sessionStore
-	service.contextResolver = NewContextResolver(normalized.DataDir, topicStore, knowledgeStore)
+	service.contextResolver = NewContextResolver(normalized.DataDir, knowledgeStore)
 	service.retrievalEngine = NewRetrievalEngine(service.indexStore, service.embedProvider)
 	if service.questionGen == nil {
 		service.questionGen = NewQuestionGenerator(
@@ -270,6 +270,22 @@ func (s *Service) DeleteKnowledgeDocument(scope string, scopeID string, filename
 		return false, ErrKnowledgeStoreUnavailable
 	}
 	return s.knowledgeStore.Delete(scope, scopeID, filename)
+}
+
+func (s *Service) ListDocuments() ([]KnowledgeDocument, error) {
+	return s.ListKnowledgeDocuments(string(KnowledgeLibraryScope), KnowledgeLibraryScopeID)
+}
+
+func (s *Service) CreateDocument(input KnowledgeDocumentCreateInput) (KnowledgeDocument, error) {
+	return s.CreateKnowledgeDocument(string(KnowledgeLibraryScope), KnowledgeLibraryScopeID, input)
+}
+
+func (s *Service) UpdateDocument(filename string, input KnowledgeDocumentUpdateInput) (KnowledgeDocument, bool, error) {
+	return s.UpdateKnowledgeDocument(string(KnowledgeLibraryScope), KnowledgeLibraryScopeID, filename, input)
+}
+
+func (s *Service) DeleteDocument(filename string) (bool, error) {
+	return s.DeleteKnowledgeDocument(string(KnowledgeLibraryScope), KnowledgeLibraryScopeID, filename)
 }
 
 func (s *Service) GetLeadContextPreview(lead model.Lead) (LeadContextPreview, error) {

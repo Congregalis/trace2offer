@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strings"
 
 	"trace2offer/backend/internal/model"
@@ -17,22 +16,20 @@ var ErrContextResolverUnavailable = errors.New("prep context resolver is unavail
 var companySlugPattern = regexp.MustCompile(`[^a-z0-9]+`)
 
 type ContextResolver struct {
-	topicStore     *TopicStore
 	knowledgeStore *KnowledgeStore
 	resumePath     string
 }
 
-func NewContextResolver(prepDataDir string, topicStore *TopicStore, knowledgeStore *KnowledgeStore) *ContextResolver {
+func NewContextResolver(prepDataDir string, knowledgeStore *KnowledgeStore) *ContextResolver {
 	rootDir := filepath.Dir(filepath.Clean(strings.TrimSpace(prepDataDir)))
 	return &ContextResolver{
-		topicStore:     topicStore,
 		knowledgeStore: knowledgeStore,
 		resumePath:     filepath.Join(rootDir, "resume", "current.md"),
 	}
 }
 
 func (r *ContextResolver) Resolve(lead model.Lead) (LeadContextPreview, error) {
-	if r == nil || r.topicStore == nil || r.knowledgeStore == nil {
+	if r == nil || r.knowledgeStore == nil {
 		return LeadContextPreview{}, ErrContextResolverUnavailable
 	}
 
@@ -54,8 +51,6 @@ func (r *ContextResolver) Resolve(lead model.Lead) (LeadContextPreview, error) {
 	}
 	preview.HasResume = hasResume
 
-	topicKeys := topicKeysFromTopics(r.topicStore.List())
-
 	if strings.TrimSpace(lead.JDText) != "" {
 		preview.Sources = append(preview.Sources, ContextSource{
 			Scope: "lead",
@@ -71,44 +66,26 @@ func (r *ContextResolver) Resolve(lead model.Lead) (LeadContextPreview, error) {
 		})
 	}
 
-	topicSources, err := r.collectTopicSources(topicKeys)
+	librarySources, err := r.collectLibrarySources()
 	if err != nil {
 		return LeadContextPreview{}, err
 	}
-	preview.Sources = append(preview.Sources, topicSources...)
+	preview.Sources = append(preview.Sources, librarySources...)
 
 	return preview, nil
 }
 
-func (r *ContextResolver) collectTopicSources(topicKeys []string) ([]ContextSource, error) {
-	sources := make([]ContextSource, 0)
-	for _, key := range topicKeys {
-		items, err := r.collectMarkdownSources(ScopeTopics, key, "topic")
-		if err != nil {
-			return nil, err
-		}
-		sources = append(sources, items...)
-	}
-	return sources, nil
-}
-
-func (r *ContextResolver) collectMarkdownSources(scope Scope, scopeID string, sourceScope string) ([]ContextSource, error) {
-	scopeID = strings.TrimSpace(scopeID)
-	if scopeID == "" {
-		return []ContextSource{}, nil
-	}
-
-	documents, err := r.knowledgeStore.List(string(scope), scopeID)
+func (r *ContextResolver) collectLibrarySources() ([]ContextSource, error) {
+	documents, err := r.knowledgeStore.List(string(KnowledgeLibraryScope), KnowledgeLibraryScopeID)
 	if err != nil {
 		return nil, err
 	}
 	sources := make([]ContextSource, 0, len(documents))
 	for _, document := range documents {
-		title := fmt.Sprintf("%s/%s", scopeID, document.Filename)
 		sources = append(sources, ContextSource{
-			Scope: sourceScope,
+			Scope: "library",
 			Kind:  "markdown",
-			Title: title,
+			Title: document.Filename,
 		})
 	}
 	return sources, nil
@@ -126,23 +103,6 @@ func (r *ContextResolver) hasResume() (bool, error) {
 		return false, fmt.Errorf("read prep resume source: %w", err)
 	}
 	return strings.TrimSpace(string(content)) != "", nil
-}
-
-func topicKeysFromTopics(topics []Topic) []string {
-	if len(topics) == 0 {
-		return []string{}
-	}
-
-	keys := make([]string, 0, len(topics))
-	for _, topic := range topics {
-		key := strings.TrimSpace(topic.Key)
-		if key == "" {
-			continue
-		}
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	return keys
 }
 
 func normalizeCompanySlug(company string) string {

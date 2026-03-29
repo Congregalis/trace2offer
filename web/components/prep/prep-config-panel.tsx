@@ -45,7 +45,7 @@ export function PrepConfigPanel({
     <Card>
       <CardHeader>
         <CardTitle className="text-base">出题配置</CardTitle>
-        <CardDescription>选择 topic 和上下文范围，然后生成一轮结构化面试题。</CardDescription>
+        <CardDescription>配置上下文范围，然后生成一轮结构化面试题。</CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
         <div className="space-y-2">

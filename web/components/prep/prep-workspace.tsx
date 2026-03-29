@@ -199,7 +199,7 @@ export function PrepWorkspace() {
             {isMetaLoading ? <Badge variant="secondary">加载配置中</Badge> : null}
             {!isMetaLoading && meta.enabled ? <Badge variant="secondary">模块已启用</Badge> : null}
           </div>
-          <p className="text-sm text-muted-foreground">备面入口只负责练习和复盘，资料维护请去「资料库」Tab。</p>
+          <p className="text-sm text-muted-foreground">备面入口只负责练习和复盘，资料维护请去「文档仓库」Tab。</p>
           {metaError ? <p className="text-sm text-destructive">{metaError}</p> : null}
           {!isMetaLoading && !meta.enabled ? (
             <p className="text-sm text-destructive">备面模块当前未启用（`T2O_PREP_ENABLED=false`）。</p>

@@ -80,23 +80,15 @@ func TestQuestionGeneratorGenerateBuildsTraceAndSession(t *testing.T) {
 		t.Fatalf("write resume: %v", err)
 	}
 
-	topicStore, err := NewTopicStore(filepath.Join(prepDir, "topic_catalog.json"))
-	if err != nil {
-		t.Fatalf("new topic store: %v", err)
-	}
-	if _, err := topicStore.Create(TopicCreateInput{Key: "rag", Name: "RAG", Description: "retrieval"}); err != nil {
-		t.Fatalf("create topic: %v", err)
-	}
-
 	knowledgeStore, err := NewKnowledgeStore(filepath.Join(prepDir, "knowledge"))
 	if err != nil {
 		t.Fatalf("new knowledge store: %v", err)
 	}
-	if _, err := knowledgeStore.Create("topics", "rag", KnowledgeDocumentCreateInput{Filename: "rag-fundamentals", Content: "RAG architecture"}); err != nil {
-		t.Fatalf("create topic doc: %v", err)
+	if _, err := knowledgeStore.Create(string(KnowledgeLibraryScope), KnowledgeLibraryScopeID, KnowledgeDocumentCreateInput{Filename: "rag-fundamentals", Content: "RAG architecture"}); err != nil {
+		t.Fatalf("create library doc: %v", err)
 	}
 
-	resolver := NewContextResolver(prepDir, topicStore, knowledgeStore)
+	resolver := NewContextResolver(prepDir, knowledgeStore)
 	indexStore, err := NewIndexStore(filepath.Join(prepDir, "prep_index.sqlite"))
 	if err != nil {
 		t.Fatalf("new index store: %v", err)

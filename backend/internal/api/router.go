@@ -141,6 +141,10 @@ func NewRouter(leads storage.LeadStore, candidates storage.CandidateStore, leadT
 		prep.POST("/topics", h.createPrepTopic)
 		prep.PATCH("/topics/:key", h.updatePrepTopic)
 		prep.DELETE("/topics/:key", h.deletePrepTopic)
+		prep.GET("/documents", h.listPrepDocuments)
+		prep.POST("/documents", h.createPrepDocument)
+		prep.PUT("/documents/:filename", h.updatePrepDocument)
+		prep.DELETE("/documents/:filename", h.deletePrepDocument)
 		prep.GET("/knowledge/:scope/:scope_id/documents", h.listPrepKnowledgeDocuments)
 		prep.POST("/knowledge/:scope/:scope_id/documents", h.createPrepKnowledgeDocument)
 		prep.PUT("/knowledge/:scope/:scope_id/documents/:filename", h.updatePrepKnowledgeDocument)
@@ -873,6 +877,80 @@ func (h *handler) deletePrepTopic(c *gin.Context) {
 	}
 	if !deleted {
 		c.JSON(http.StatusNotFound, gin.H{"message": "prep topic not found"})
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
+func (h *handler) listPrepDocuments(c *gin.Context) {
+	if h.prep == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"message": "prep service is not configured"})
+		return
+	}
+
+	documents, err := h.prep.ListDocuments()
+	if err != nil {
+		respondPrepError(c, "list prep documents failed", err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": documents})
+}
+
+func (h *handler) createPrepDocument(c *gin.Context) {
+	if h.prep == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"message": "prep service is not configured"})
+		return
+	}
+
+	input, ok := bindPrepKnowledgeCreateInput(c)
+	if !ok {
+		return
+	}
+
+	created, err := h.prep.CreateDocument(input)
+	if err != nil {
+		respondPrepError(c, "create prep document failed", err)
+		return
+	}
+	c.JSON(http.StatusCreated, gin.H{"data": created})
+}
+
+func (h *handler) updatePrepDocument(c *gin.Context) {
+	if h.prep == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"message": "prep service is not configured"})
+		return
+	}
+
+	input, ok := bindPrepKnowledgeUpdateInput(c)
+	if !ok {
+		return
+	}
+
+	updated, found, err := h.prep.UpdateDocument(c.Param("filename"), input)
+	if err != nil {
+		respondPrepError(c, "update prep document failed", err)
+		return
+	}
+	if !found {
+		c.JSON(http.StatusNotFound, gin.H{"message": "prep document not found"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": updated})
+}
+
+func (h *handler) deletePrepDocument(c *gin.Context) {
+	if h.prep == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"message": "prep service is not configured"})
+		return
+	}
+
+	deleted, err := h.prep.DeleteDocument(c.Param("filename"))
+	if err != nil {
+		respondPrepError(c, "delete prep document failed", err)
+		return
+	}
+	if !deleted {
+		c.JSON(http.StatusNotFound, gin.H{"message": "prep document not found"})
 		return
 	}
 	c.Status(http.StatusNoContent)
