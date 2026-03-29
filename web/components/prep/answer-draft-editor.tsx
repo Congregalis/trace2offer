@@ -11,6 +11,8 @@ export interface AnswerDraftEditorProps {
   sessionId: string;
   questions: PrepQuestion[];
   initialAnswers: PrepAnswer[];
+  readOnly?: boolean;
+  onDraftAnswersChange?: (answers: PrepAnswer[]) => void;
 }
 
 function toAnswerMap(answers: PrepAnswer[]): Record<number, string> {
@@ -46,7 +48,20 @@ function debounce<TArgs extends unknown[]>(callback: (...args: TArgs) => void, w
   return wrapped;
 }
 
-export function AnswerDraftEditor({ sessionId, questions, initialAnswers }: AnswerDraftEditorProps) {
+function buildDraftAnswers(questions: PrepQuestion[], answerMap: Record<number, string>): PrepAnswer[] {
+  return questions.map((question) => ({
+    questionId: question.id,
+    answer: answerMap[question.id] || "",
+  }));
+}
+
+export function AnswerDraftEditor({
+  sessionId,
+  questions,
+  initialAnswers,
+  readOnly = false,
+  onDraftAnswersChange,
+}: AnswerDraftEditorProps) {
   const [answerMap, setAnswerMap] = useState<Record<number, string>>(() => toAnswerMap(initialAnswers));
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -124,6 +139,9 @@ export function AnswerDraftEditor({ sessionId, questions, initialAnswers }: Answ
   }, [normalizedSessionID]);
 
   useEffect(() => {
+    if (readOnly) {
+      return;
+    }
     if (!hydratedRef.current) {
       return;
     }
@@ -131,15 +149,20 @@ export function AnswerDraftEditor({ sessionId, questions, initialAnswers }: Answ
       return;
     }
 
-    debouncedSave(
-      questions.map((question) => ({
-        questionId: question.id,
-        answer: answerMap[question.id] || "",
-      })),
-    );
-  }, [answerMap, debouncedSave, questions, saveStatus]);
+    debouncedSave(buildDraftAnswers(questions, answerMap));
+  }, [answerMap, debouncedSave, questions, readOnly, saveStatus]);
+
+  useEffect(() => {
+    if (!onDraftAnswersChange) {
+      return;
+    }
+    onDraftAnswersChange(buildDraftAnswers(questions, answerMap));
+  }, [answerMap, onDraftAnswersChange, questions]);
 
   function updateAnswer(questionID: number, value: string) {
+    if (readOnly) {
+      return;
+    }
     setAnswerMap((previous) => ({
       ...previous,
       [questionID]: value,
@@ -170,6 +193,7 @@ export function AnswerDraftEditor({ sessionId, questions, initialAnswers }: Answ
   return (
     <section className="space-y-4">
       {renderSaveHint() ? <p className="text-sm text-muted-foreground">{renderSaveHint()}</p> : null}
+      {readOnly ? <p className="text-sm text-muted-foreground">会话已提交，草稿编辑已禁用。</p> : null}
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
       {questions.length === 0 ? (
@@ -185,6 +209,7 @@ export function AnswerDraftEditor({ sessionId, questions, initialAnswers }: Answ
                 data-testid={`prep-answer-input-${question.id}`}
                 value={answerMap[question.id] || ""}
                 onChange={(event) => updateAnswer(question.id, event.target.value)}
+                disabled={readOnly}
                 className="min-h-[140px]"
                 placeholder="请输入你的答案草稿，停止输入 1 秒后自动保存"
               />

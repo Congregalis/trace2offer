@@ -1126,3 +1126,21 @@ export async function savePrepDraftAnswers(sessionId: string, answers: PrepAnswe
   const payload = (await response.json()) as APISinglePayload<APIPrepDraftAnswersSaveResult>;
   return normalizeDraftAnswersSaveResult(payload.data);
 }
+
+export async function submitPrepSession(sessionId: string): Promise<PrepSession> {
+  const normalizedSessionID = (sessionId || "").trim();
+  if (!normalizedSessionID) {
+    throw new Error("session_id is required");
+  }
+
+  const response = await fetch(getAPIURL(`/api/prep/sessions/${encodeSegment(normalizedSessionID)}/submit`), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+  if (!response.ok) {
+    throw await parseAPIError(response, "提交答案失败");
+  }
+
+  const payload = (await response.json()) as APISinglePayload<APIPrepSession>;
+  return normalizeSession(payload.data);
+}

@@ -415,6 +415,31 @@ func TestLeadAndChatAPI(t *testing.T) {
 		t.Fatalf("expected 2 persisted answers, got %d", len(storedSession.Answers))
 	}
 
+	resp = doJSONRequest(t, router, http.MethodPost, "/api/prep/sessions/prep_01/submit", nil)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("POST /api/prep/sessions/:session_id/submit status=%d body=%s", resp.Code, resp.Body.String())
+	}
+	var submittedSessionPayload struct {
+		Data prep.Session `json:"data"`
+	}
+	decodeJSONBody(t, resp, &submittedSessionPayload)
+	if submittedSessionPayload.Data.Status != prep.PrepSessionStatusSubmitted {
+		t.Fatalf("expected submitted status, got %q", submittedSessionPayload.Data.Status)
+	}
+	if len(submittedSessionPayload.Data.Answers) != 2 {
+		t.Fatalf("expected 2 answers after submit, got %d", len(submittedSessionPayload.Data.Answers))
+	}
+	for _, answer := range submittedSessionPayload.Data.Answers {
+		if answer.SubmittedAt == nil || strings.TrimSpace(*answer.SubmittedAt) == "" {
+			t.Fatalf("expected submitted_at in answer, got %+v", answer)
+		}
+	}
+
+	resp = doJSONRequest(t, router, http.MethodPost, "/api/prep/sessions/prep_01/submit", nil)
+	if resp.Code != http.StatusBadRequest {
+		t.Fatalf("POST /api/prep/sessions/:session_id/submit repeated status=%d body=%s", resp.Code, resp.Body.String())
+	}
+
 	resp = doJSONRequest(t, router, http.MethodPut, "/api/prep/sessions/prep_01/draft-answers", map[string]any{
 		"answers": []map[string]any{{"question_id": 99, "answer": "invalid question"}},
 	})
@@ -422,20 +447,43 @@ func TestLeadAndChatAPI(t *testing.T) {
 		t.Fatalf("PUT /api/prep/sessions/:session_id/draft-answers invalid question status=%d body=%s", resp.Code, resp.Body.String())
 	}
 
-	sessionFixture.Status = prep.PrepSessionStatusSubmitted
-	sessionFixtureRaw, err = json.MarshalIndent(sessionFixture, "", "  ")
-	if err != nil {
-		t.Fatalf("marshal submitted prep session fixture: %v", err)
-	}
-	if err := os.WriteFile(sessionFixturePath, sessionFixtureRaw, 0o644); err != nil {
-		t.Fatalf("write submitted prep session fixture: %v", err)
-	}
-
 	resp = doJSONRequest(t, router, http.MethodPut, "/api/prep/sessions/prep_01/draft-answers", map[string]any{
 		"answers": []map[string]any{{"question_id": 1, "answer": "should fail when submitted"}},
 	})
 	if resp.Code != http.StatusBadRequest {
 		t.Fatalf("PUT /api/prep/sessions/:session_id/draft-answers submitted status=%d body=%s", resp.Code, resp.Body.String())
+	}
+
+	emptySubmitFixture := prep.Session{
+		ID:       "prep_empty_submit",
+		LeadID:   leadID,
+		Company:  "OpenAI",
+		Position: "Go Backend Engineer",
+		Status:   prep.PrepSessionStatusDraft,
+		Questions: []prep.Question{{
+			ID:      1,
+			Type:    "open",
+			Content: "empty",
+		}},
+		Answers: []prep.Answer{{
+			QuestionID: 1,
+			Answer:     "   ",
+		}},
+		CreatedAt: time.Now().UTC().Add(-time.Minute).Format(time.RFC3339),
+		UpdatedAt: time.Now().UTC().Add(-time.Minute).Format(time.RFC3339),
+	}
+	emptySubmitRaw, err := json.MarshalIndent(emptySubmitFixture, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal empty prep session fixture: %v", err)
+	}
+	emptySubmitPath := filepath.Join(tmpDir, "prep", "sessions", "prep_empty_submit.json")
+	if err := os.WriteFile(emptySubmitPath, emptySubmitRaw, 0o644); err != nil {
+		t.Fatalf("write empty prep session fixture: %v", err)
+	}
+
+	resp = doJSONRequest(t, router, http.MethodPost, "/api/prep/sessions/prep_empty_submit/submit", nil)
+	if resp.Code != http.StatusBadRequest {
+		t.Fatalf("POST /api/prep/sessions/:session_id/submit empty answers status=%d body=%s", resp.Code, resp.Body.String())
 	}
 
 	resp = doJSONRequest(t, router, http.MethodPut, "/api/prep/sessions/missing/draft-answers", map[string]any{

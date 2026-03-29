@@ -5,17 +5,34 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { createPrepSessionStream, fetchPrepLeadContextPreview, fetchPrepMeta, fetchPrepSession } from "@/lib/prep-api";
-import { DEFAULT_PREP_META, PrepGenerationTrace, PrepLeadContextPreview, PrepMeta, PrepSession } from "@/lib/prep-types";
+import { createPrepSessionStream, fetchPrepLeadContextPreview, fetchPrepMeta, fetchPrepSession, submitPrepSession } from "@/lib/prep-api";
+import { DEFAULT_PREP_META, PrepAnswer, PrepGenerationTrace, PrepLeadContextPreview, PrepMeta, PrepSession } from "@/lib/prep-types";
 import { AnswerDraftEditor } from "./answer-draft-editor";
 import { PrepConfigPanel, PrepGenerationConfig } from "./prep-config-panel";
 import { PrepContextPreviewCard } from "./prep-context-preview-card";
 import { PrepRunTimeline } from "./prep-run-timeline";
 import { PrepTraceDrawer } from "./prep-trace-drawer";
 import { QuestionList } from "./question-list";
+import { SubmitAnswersButton } from "./submit-answers-button";
 
 function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === "AbortError";
+}
+
+function deriveDraftAnswers(session: PrepSession | null): PrepAnswer[] {
+  if (!session) {
+    return [];
+  }
+  const answerMap = new Map<number, string>();
+  for (const answer of session.answers || []) {
+    if (answer.questionId > 0) {
+      answerMap.set(answer.questionId, answer.answer || "");
+    }
+  }
+  return (session.questions || []).map((question) => ({
+    questionId: question.id,
+    answer: answerMap.get(question.id) || "",
+  }));
 }
 
 export function PrepWorkspace() {
@@ -38,6 +55,7 @@ export function PrepWorkspace() {
   const [liveTrace, setLiveTrace] = useState<PrepGenerationTrace | null>(null);
   const [liveStageStatus, setLiveStageStatus] = useState<Record<string, string>>({});
   const [liveStageOutput, setLiveStageOutput] = useState<Record<string, string>>({});
+  const [draftAnswers, setDraftAnswers] = useState<PrepAnswer[]>([]);
 
   const [config, setConfig] = useState<PrepGenerationConfig>({
     questionCount: DEFAULT_PREP_META.defaultQuestionCount,
@@ -134,6 +152,10 @@ export function PrepWorkspace() {
     };
   }, [sessionID]);
 
+  useEffect(() => {
+    setDraftAnswers(deriveDraftAnswers(session));
+  }, [session]);
+
   const handleGenerateQuestions = () => {
     if (!leadID.trim()) {
       setPracticeError("lead_id 缺失，无法生成题目。请从线索表重新进入。");
@@ -188,6 +210,17 @@ export function PrepWorkspace() {
   };
 
   const timelineTrace = isGenerating ? liveTrace : session?.generationTrace || liveTrace;
+  const answeredCount = useMemo(() => draftAnswers.filter((item) => (item.answer || "").trim().length > 0).length, [draftAnswers]);
+  const totalQuestions = session?.questions.length || 0;
+  const isSubmitted = (session?.status || "").trim() === "submitted";
+
+  const handleSubmitAnswers = async () => {
+    if (!session?.id) {
+      throw new Error("session_id is required");
+    }
+    const submittedSession = await submitPrepSession(session.id);
+    setSession(submittedSession);
+  };
 
   return (
     <main className="mx-auto w-full max-w-7xl px-4 pb-12 pt-6 sm:px-6">
@@ -237,7 +270,31 @@ export function PrepWorkspace() {
                 isStreaming={isGenerating}
               />
               <QuestionList questions={session?.questions || []} />
-              {session ? <AnswerDraftEditor sessionId={session.id} questions={session.questions} initialAnswers={session.answers} /> : null}
+              {session ? (
+                <div className="space-y-3">
+                  {isSubmitted ? (
+                    <p className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-300">
+                      当前会话已提交，答案已锁定为正式提交状态。
+                    </p>
+                  ) : null}
+                  <AnswerDraftEditor
+                    sessionId={session.id}
+                    questions={session.questions}
+                    initialAnswers={session.answers}
+                    readOnly={isSubmitted}
+                    onDraftAnswersChange={setDraftAnswers}
+                  />
+                  <div className="flex justify-end">
+                    <SubmitAnswersButton
+                      disabled={isGenerating || totalQuestions === 0 || answeredCount === 0}
+                      isSubmitted={isSubmitted}
+                      answeredCount={answeredCount}
+                      totalQuestions={totalQuestions}
+                      onSubmit={handleSubmitAnswers}
+                    />
+                  </div>
+                </div>
+              ) : null}
             </div>
           </TabsContent>
 

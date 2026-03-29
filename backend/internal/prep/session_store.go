@@ -197,6 +197,55 @@ func (s *SessionStore) UpdateAnswers(sessionID string, answers []Answer) error {
 	return writeSessionFile(path, &session)
 }
 
+func (s *SessionStore) Submit(sessionID string) (*Session, error) {
+	if s == nil {
+		return nil, ErrSessionStoreUnavailable
+	}
+	id, err := normalizeSessionID(sessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	path, err := s.sessionPath(id)
+	if err != nil {
+		return nil, err
+	}
+
+	payload, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, ErrSessionNotFound
+		}
+		return nil, fmt.Errorf("read prep session file: %w", err)
+	}
+
+	var session Session
+	if err := json.Unmarshal(payload, &session); err != nil {
+		return nil, fmt.Errorf("decode prep session file: %w", err)
+	}
+	if strings.TrimSpace(session.Status) != PrepSessionStatusDraft {
+		return nil, &ValidationError{Field: "status", Message: "session already submitted"}
+	}
+	if !hasNonEmptyAnswer(session.Answers) {
+		return nil, &ValidationError{Field: "answers", Message: "at least one non-empty answer is required"}
+	}
+
+	submittedAt := time.Now().UTC().Format(time.RFC3339)
+	for index := range session.Answers {
+		session.Answers[index].SubmittedAt = &submittedAt
+	}
+	session.Status = PrepSessionStatusSubmitted
+	session.UpdatedAt = submittedAt
+
+	if err := writeSessionFile(path, &session); err != nil {
+		return nil, err
+	}
+	return &session, nil
+}
+
 func (s *SessionStore) sessionPath(sessionID string) (string, error) {
 	path := filepath.Join(s.rootDir, sessionID+".json")
 	rel, err := filepath.Rel(s.rootDir, path)
@@ -255,4 +304,13 @@ func normalizeDraftAnswersInput(answers []Answer) ([]Answer, error) {
 		})
 	}
 	return normalized, nil
+}
+
+func hasNonEmptyAnswer(answers []Answer) bool {
+	for _, item := range answers {
+		if strings.TrimSpace(item.Answer) != "" {
+			return true
+		}
+	}
+	return false
 }

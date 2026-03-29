@@ -567,6 +567,26 @@ func (s *Service) SaveDraftAnswers(sessionID string, answers []Answer) error {
 	return nil
 }
 
+func (s *Service) SubmitSession(sessionID string) (Session, error) {
+	if err := s.ensureEnabled(); err != nil {
+		return Session{}, err
+	}
+	if s.sessionStore == nil {
+		return Session{}, ErrSessionStoreUnavailable
+	}
+	submitted, err := s.sessionStore.Submit(sessionID)
+	if err != nil {
+		if errors.Is(err, ErrSessionNotFound) {
+			return Session{}, ErrSessionNotFound
+		}
+		return Session{}, err
+	}
+	if submitted == nil {
+		return Session{}, fmt.Errorf("submit prep session returned nil")
+	}
+	return *submitted, nil
+}
+
 func (s *Service) Search(input SearchConfig) (*SearchResult, error) {
 	if err := s.ensureEnabled(); err != nil {
 		return nil, err
