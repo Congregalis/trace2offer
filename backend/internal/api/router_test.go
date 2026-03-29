@@ -429,6 +429,15 @@ func TestLeadAndChatAPI(t *testing.T) {
 	if len(submittedSessionPayload.Data.Answers) != 2 {
 		t.Fatalf("expected 2 answers after submit, got %d", len(submittedSessionPayload.Data.Answers))
 	}
+	if submittedSessionPayload.Data.Evaluation == nil {
+		t.Fatalf("expected evaluation generated on submit")
+	}
+	if submittedSessionPayload.Data.Evaluation.Status != prep.EvaluationStatusPending {
+		t.Fatalf("expected evaluation pending status, got %+v", submittedSessionPayload.Data.Evaluation)
+	}
+	if submittedSessionPayload.Data.Evaluation.Overall.TotalQuestions != 2 {
+		t.Fatalf("unexpected evaluation overall: %+v", submittedSessionPayload.Data.Evaluation.Overall)
+	}
 	for _, answer := range submittedSessionPayload.Data.Answers {
 		if answer.SubmittedAt == nil || strings.TrimSpace(*answer.SubmittedAt) == "" {
 			t.Fatalf("expected submitted_at in answer, got %+v", answer)
@@ -438,6 +447,11 @@ func TestLeadAndChatAPI(t *testing.T) {
 	resp = doJSONRequest(t, router, http.MethodPost, "/api/prep/sessions/prep_01/submit", nil)
 	if resp.Code != http.StatusBadRequest {
 		t.Fatalf("POST /api/prep/sessions/:session_id/submit repeated status=%d body=%s", resp.Code, resp.Body.String())
+	}
+
+	resp = doJSONRequest(t, router, http.MethodPost, "/api/prep/sessions/prep_01/evaluation/retry", nil)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("POST /api/prep/sessions/:session_id/evaluation/retry status=%d body=%s", resp.Code, resp.Body.String())
 	}
 
 	resp = doJSONRequest(t, router, http.MethodPut, "/api/prep/sessions/prep_01/draft-answers", map[string]any{

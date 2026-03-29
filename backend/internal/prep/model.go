@@ -25,6 +25,13 @@ const (
 	PrepSessionStatusSubmitted = "submitted"
 )
 
+const (
+	EvaluationStatusPending   = "pending"
+	EvaluationStatusRunning   = "running"
+	EvaluationStatusCompleted = "completed"
+	EvaluationStatusFailed    = "failed"
+)
+
 type Meta struct {
 	Enabled              bool     `json:"enabled"`
 	DefaultQuestionCount int      `json:"default_question_count"`
@@ -147,8 +154,40 @@ type GenerationResult struct {
 }
 
 type Evaluation struct {
-	OverallScore float64 `json:"overall_score"`
-	Summary      string  `json:"summary"`
+	Status       string            `json:"status"`
+	Error        string            `json:"error,omitempty"`
+	Scores       []QuestionScore   `json:"scores"`
+	Overall      OverallEvaluation `json:"overall"`
+	StartedAt    string            `json:"started_at,omitempty"`
+	CompletedAt  string            `json:"completed_at,omitempty"`
+	OverallScore float64           `json:"overall_score,omitempty"`
+	Summary      string            `json:"summary,omitempty"`
+}
+
+type QuestionScore struct {
+	QuestionID   int                    `json:"question_id"`
+	Score        float64                `json:"score"`
+	Answered     bool                   `json:"answered"`
+	Summary      string                 `json:"summary"`
+	Strengths    []string               `json:"strengths"`
+	Improvements []string               `json:"improvements"`
+	WeakPoints   []string               `json:"weak_points"`
+	Sources      []QuestionScoreSource  `json:"sources"`
+	Trace        map[string]interface{} `json:"trace,omitempty"`
+}
+
+type QuestionScoreSource struct {
+	Title string  `json:"title"`
+	Score float64 `json:"score"`
+}
+
+type OverallEvaluation struct {
+	AverageScore   float64  `json:"average_score"`
+	AnsweredCount  int      `json:"answered_count"`
+	TotalQuestions int      `json:"total_questions"`
+	Strengths      []string `json:"strengths"`
+	WeakPoints     []string `json:"weak_points"`
+	Summary        string   `json:"summary"`
 }
 
 type ReferenceAnswer struct {

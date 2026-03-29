@@ -29,8 +29,9 @@ func TestServiceSubmitSessionRoundtrip(t *testing.T) {
 	}
 
 	service := &Service{
-		config:       Config{Enabled: true},
-		sessionStore: store,
+		config:        Config{Enabled: true},
+		sessionStore:  store,
+		scoringEngine: NewScoringEngine(nil, nil),
 	}
 
 	submitted, err := service.SubmitSession("prep_service_submit")
@@ -42,6 +43,15 @@ func TestServiceSubmitSessionRoundtrip(t *testing.T) {
 	}
 	if len(submitted.Answers) != 1 || submitted.Answers[0].SubmittedAt == nil || *submitted.Answers[0].SubmittedAt == "" {
 		t.Fatalf("expected submitted_at in answers, got %+v", submitted.Answers)
+	}
+	if submitted.Evaluation == nil {
+		t.Fatalf("expected evaluation generated on submit")
+	}
+	if submitted.Evaluation.Status == "" {
+		t.Fatalf("expected non-empty evaluation status, got %+v", submitted.Evaluation)
+	}
+	if submitted.Evaluation.Overall.TotalQuestions != 1 {
+		t.Fatalf("expected total questions 1, got %+v", submitted.Evaluation.Overall)
 	}
 }
 
@@ -69,8 +79,9 @@ func TestServiceSubmitSessionValidation(t *testing.T) {
 	}
 
 	service := &Service{
-		config:       Config{Enabled: true},
-		sessionStore: store,
+		config:        Config{Enabled: true},
+		sessionStore:  store,
+		scoringEngine: NewScoringEngine(nil, nil),
 	}
 
 	if _, err := service.SubmitSession("prep_service_empty"); !IsValidationError(err) {
@@ -98,5 +109,39 @@ func TestServiceSubmitSessionValidation(t *testing.T) {
 	}
 	if _, err := service.SubmitSession("prep_service_twice"); !IsValidationError(err) {
 		t.Fatalf("second submit should be validation error, got %v", err)
+	}
+}
+
+func TestServiceRetrySessionEvaluationRequiresSubmitted(t *testing.T) {
+	t.Parallel()
+
+	store, err := NewSessionStore(filepath.Join(t.TempDir(), "sessions"))
+	if err != nil {
+		t.Fatalf("new session store: %v", err)
+	}
+	if err := store.Create(&Session{
+		ID:       "prep_retry_validation",
+		LeadID:   "lead_004",
+		Company:  "OpenAI",
+		Position: "Engineer",
+		Status:   PrepSessionStatusDraft,
+		Questions: []Question{
+			{ID: 1, Type: "open", Content: "Q1"},
+		},
+		Answers: []Answer{
+			{QuestionID: 1, Answer: "ok"},
+		},
+	}); err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+
+	service := &Service{
+		config:        Config{Enabled: true},
+		sessionStore:  store,
+		scoringEngine: NewScoringEngine(nil, nil),
+	}
+
+	if _, err := service.RetrySessionEvaluation("prep_retry_validation"); !IsValidationError(err) {
+		t.Fatalf("expected validation error, got %v", err)
 	}
 }

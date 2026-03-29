@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"time"
 
 	"trace2offer/backend/internal/model"
 )
@@ -24,6 +26,10 @@ type Service struct {
 	questionGen     *QuestionGenerator
 	retrievalEngine *RetrievalEngine
 	ingestion       *IngestionService
+	scoringEngine   *ScoringEngine
+	scoringMu       sync.Mutex
+	scoringInFlight map[string]struct{}
+	scoringAsync    bool
 }
 
 type ServiceOption func(*Service)
@@ -89,7 +95,11 @@ func NewService(config Config, options ...ServiceOption) (*Service, error) {
 		return nil, err
 	}
 
-	service := &Service{config: normalized}
+	service := &Service{
+		config:          normalized,
+		scoringInFlight: map[string]struct{}{},
+		scoringAsync:    true,
+	}
 	for _, option := range options {
 		if option != nil {
 			option(service)
@@ -131,6 +141,9 @@ func NewService(config Config, options ...ServiceOption) (*Service, error) {
 			service.questionModel,
 			normalized.DefaultQuestionCount,
 		)
+	}
+	if service.scoringEngine == nil {
+		service.scoringEngine = NewScoringEngine(service.retrievalEngine, service.questionModel)
 	}
 	if service.indexStore != nil && service.embedProvider != nil {
 		ingestion, err := NewIngestionService(normalized.DataDir, IngestionDependencies{
@@ -584,7 +597,171 @@ func (s *Service) SubmitSession(sessionID string) (Session, error) {
 	if submitted == nil {
 		return Session{}, fmt.Errorf("submit prep session returned nil")
 	}
+	submitted.Evaluation = buildPendingEvaluation(len(submitted.Questions))
+	submitted.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+	if err := s.sessionStore.Update(submitted); err != nil {
+		if errors.Is(err, ErrSessionNotFound) {
+			return Session{}, ErrSessionNotFound
+		}
+		return Session{}, err
+	}
+	s.enqueueScoringJob(submitted.ID)
 	return *submitted, nil
+}
+
+func (s *Service) RetrySessionEvaluation(sessionID string) (Session, error) {
+	if err := s.ensureEnabled(); err != nil {
+		return Session{}, err
+	}
+	if s.sessionStore == nil {
+		return Session{}, ErrSessionStoreUnavailable
+	}
+
+	session, err := s.sessionStore.Get(sessionID)
+	if err != nil {
+		if errors.Is(err, ErrSessionNotFound) {
+			return Session{}, ErrSessionNotFound
+		}
+		return Session{}, err
+	}
+	if strings.TrimSpace(session.Status) != PrepSessionStatusSubmitted {
+		return Session{}, &ValidationError{Field: "status", Message: "only submitted session can retry evaluation"}
+	}
+
+	session.Evaluation = buildPendingEvaluation(len(session.Questions))
+	session.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+	if err := s.sessionStore.Update(session); err != nil {
+		if errors.Is(err, ErrSessionNotFound) {
+			return Session{}, ErrSessionNotFound
+		}
+		return Session{}, err
+	}
+	s.enqueueScoringJob(session.ID)
+	return *session, nil
+}
+
+func buildPendingEvaluation(totalQuestions int) *Evaluation {
+	return &Evaluation{
+		Status: EvaluationStatusPending,
+		Scores: []QuestionScore{},
+		Overall: OverallEvaluation{
+			AnsweredCount:  0,
+			TotalQuestions: totalQuestions,
+		},
+		Summary: "评分排队中",
+	}
+}
+
+func (s *Service) enqueueScoringJob(sessionID string) {
+	if s == nil {
+		return
+	}
+	if !s.scoringAsync {
+		s.runScoringJob(strings.TrimSpace(sessionID))
+		return
+	}
+	normalizedID := strings.TrimSpace(sessionID)
+	if normalizedID == "" {
+		return
+	}
+
+	s.scoringMu.Lock()
+	if s.scoringInFlight == nil {
+		s.scoringInFlight = map[string]struct{}{}
+	}
+	if _, exists := s.scoringInFlight[normalizedID]; exists {
+		s.scoringMu.Unlock()
+		return
+	}
+	s.scoringInFlight[normalizedID] = struct{}{}
+	s.scoringMu.Unlock()
+
+	go func(id string) {
+		defer func() {
+			s.scoringMu.Lock()
+			delete(s.scoringInFlight, id)
+			s.scoringMu.Unlock()
+		}()
+		s.runScoringJob(id)
+	}(normalizedID)
+}
+
+func (s *Service) runScoringJob(sessionID string) {
+	if s == nil || s.sessionStore == nil {
+		return
+	}
+
+	session, err := s.sessionStore.Get(sessionID)
+	if err != nil || session == nil {
+		return
+	}
+	if strings.TrimSpace(session.Status) != PrepSessionStatusSubmitted {
+		return
+	}
+
+	startedAt := time.Now().UTC().Format(time.RFC3339)
+	running := session.Evaluation
+	if running == nil {
+		running = buildPendingEvaluation(len(session.Questions))
+	}
+	running.Status = EvaluationStatusRunning
+	running.Error = ""
+	running.StartedAt = startedAt
+	running.CompletedAt = ""
+	running.Summary = "评分进行中"
+	session.Evaluation = running
+	session.UpdatedAt = startedAt
+	_ = s.sessionStore.Update(session)
+
+	if s.scoringEngine == nil {
+		s.markSessionScoringFailed(sessionID, startedAt, ErrScoringEngineUnavailable)
+		return
+	}
+	scoringCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	evaluation, err := s.scoringEngine.EvaluateSession(scoringCtx, *session)
+	if err != nil {
+		s.markSessionScoringFailed(sessionID, startedAt, err)
+		return
+	}
+
+	latest, err := s.sessionStore.Get(sessionID)
+	if err != nil || latest == nil {
+		return
+	}
+	completedAt := time.Now().UTC().Format(time.RFC3339)
+	evaluation.Status = EvaluationStatusCompleted
+	evaluation.Error = ""
+	evaluation.StartedAt = startedAt
+	evaluation.CompletedAt = completedAt
+	latest.Evaluation = evaluation
+	latest.UpdatedAt = completedAt
+	_ = s.sessionStore.Update(latest)
+}
+
+func (s *Service) markSessionScoringFailed(sessionID string, startedAt string, scoringErr error) {
+	if s == nil || s.sessionStore == nil {
+		return
+	}
+	session, err := s.sessionStore.Get(sessionID)
+	if err != nil || session == nil {
+		return
+	}
+	completedAt := time.Now().UTC().Format(time.RFC3339)
+	session.Evaluation = &Evaluation{
+		Status: EvaluationStatusFailed,
+		Error:  strings.TrimSpace(scoringErr.Error()),
+		Scores: []QuestionScore{},
+		Overall: OverallEvaluation{
+			AnsweredCount:  0,
+			TotalQuestions: len(session.Questions),
+		},
+		StartedAt:   startedAt,
+		CompletedAt: completedAt,
+		Summary:     "评分失败",
+	}
+	session.UpdatedAt = completedAt
+	_ = s.sessionStore.Update(session)
 }
 
 func (s *Service) Search(input SearchConfig) (*SearchResult, error) {

@@ -186,6 +186,43 @@ export interface PrepAnswer {
   submittedAt?: string;
 }
 
+export interface PrepQuestionScoreSource {
+  title: string;
+  score: number;
+}
+
+export interface PrepQuestionScore {
+  questionId: number;
+  score: number;
+  answered: boolean;
+  summary: string;
+  strengths: string[];
+  improvements: string[];
+  weakPoints: string[];
+  sources: PrepQuestionScoreSource[];
+  trace?: Record<string, unknown>;
+}
+
+export interface PrepOverallEvaluation {
+  averageScore: number;
+  answeredCount: number;
+  totalQuestions: number;
+  strengths: string[];
+  weakPoints: string[];
+  summary: string;
+}
+
+export interface PrepEvaluation {
+  status: "pending" | "running" | "completed" | "failed" | string;
+  error?: string;
+  startedAt?: string;
+  completedAt?: string;
+  scores: PrepQuestionScore[];
+  overall: PrepOverallEvaluation;
+  overallScore?: number;
+  summary?: string;
+}
+
 export interface PrepSessionConfig {
   questionCount: number;
   includeResume: boolean;
@@ -249,7 +286,7 @@ export interface PrepSession {
   sources: PrepContextSource[];
   questions: PrepQuestion[];
   answers: PrepAnswer[];
-  evaluation?: unknown;
+  evaluation?: PrepEvaluation;
   referenceAnswers: Record<string, unknown>;
   generationTrace?: PrepGenerationTrace;
   createdAt: string;

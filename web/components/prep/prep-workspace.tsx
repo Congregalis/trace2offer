@@ -3,17 +3,28 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { createPrepSessionStream, fetchPrepLeadContextPreview, fetchPrepMeta, fetchPrepSession, submitPrepSession } from "@/lib/prep-api";
+import {
+  createPrepSessionStream,
+  fetchPrepLeadContextPreview,
+  fetchPrepMeta,
+  fetchPrepSession,
+  retryPrepSessionEvaluation,
+  submitPrepSession,
+} from "@/lib/prep-api";
 import { DEFAULT_PREP_META, PrepAnswer, PrepGenerationTrace, PrepLeadContextPreview, PrepMeta, PrepSession } from "@/lib/prep-types";
 import { AnswerDraftEditor } from "./answer-draft-editor";
 import { PrepConfigPanel, PrepGenerationConfig } from "./prep-config-panel";
 import { PrepContextPreviewCard } from "./prep-context-preview-card";
 import { PrepRunTimeline } from "./prep-run-timeline";
 import { PrepTraceDrawer } from "./prep-trace-drawer";
+import { QuestionScoreCard } from "./question-score-card";
 import { QuestionList } from "./question-list";
+import { ReviewSummaryCard } from "./review-summary-card";
 import { SubmitAnswersButton } from "./submit-answers-button";
+import { WeakPointList } from "./weak-point-list";
 
 function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === "AbortError";
@@ -56,6 +67,7 @@ export function PrepWorkspace() {
   const [liveStageStatus, setLiveStageStatus] = useState<Record<string, string>>({});
   const [liveStageOutput, setLiveStageOutput] = useState<Record<string, string>>({});
   const [draftAnswers, setDraftAnswers] = useState<PrepAnswer[]>([]);
+  const [isRetryingEvaluation, setIsRetryingEvaluation] = useState(false);
 
   const [config, setConfig] = useState<PrepGenerationConfig>({
     questionCount: DEFAULT_PREP_META.defaultQuestionCount,
@@ -156,6 +168,30 @@ export function PrepWorkspace() {
     setDraftAnswers(deriveDraftAnswers(session));
   }, [session]);
 
+  useEffect(() => {
+    if (!session?.id) {
+      return;
+    }
+    const status = (session.evaluation?.status || "").trim();
+    if (status !== "pending" && status !== "running") {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      void fetchPrepSession(session.id)
+        .then((loadedSession) => {
+          setSession(loadedSession);
+        })
+        .catch(() => {
+          // keep current state; retry on next poll tick
+        });
+    }, 2000);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [session?.evaluation?.status, session?.id]);
+
   const handleGenerateQuestions = () => {
     if (!leadID.trim()) {
       setPracticeError("lead_id 缺失，无法生成题目。请从线索表重新进入。");
@@ -213,6 +249,25 @@ export function PrepWorkspace() {
   const answeredCount = useMemo(() => draftAnswers.filter((item) => (item.answer || "").trim().length > 0).length, [draftAnswers]);
   const totalQuestions = session?.questions.length || 0;
   const isSubmitted = (session?.status || "").trim() === "submitted";
+  const evaluationStatus = (session?.evaluation?.status || "").trim();
+  const scoreByQuestionID = useMemo(() => {
+    const mapped = new Map<number, NonNullable<PrepSession["evaluation"]>["scores"][number]>();
+    for (const score of session?.evaluation?.scores || []) {
+      if (score.questionId > 0) {
+        mapped.set(score.questionId, score);
+      }
+    }
+    return mapped;
+  }, [session?.evaluation?.scores]);
+  const answerByQuestionID = useMemo(() => {
+    const mapped = new Map<number, string>();
+    for (const answer of session?.answers || []) {
+      if (answer.questionId > 0) {
+        mapped.set(answer.questionId, answer.answer || "");
+      }
+    }
+    return mapped;
+  }, [session?.answers]);
 
   const handleSubmitAnswers = async () => {
     if (!session?.id) {
@@ -220,6 +275,22 @@ export function PrepWorkspace() {
     }
     const submittedSession = await submitPrepSession(session.id);
     setSession(submittedSession);
+  };
+
+  const handleRetryEvaluation = async () => {
+    if (!session?.id) {
+      return;
+    }
+    setIsRetryingEvaluation(true);
+    try {
+      const updated = await retryPrepSessionEvaluation(session.id);
+      setSession(updated);
+    } catch (error: unknown) {
+      const message = error instanceof Error && error.message ? error.message : "重试评分失败";
+      setPracticeError(message);
+    } finally {
+      setIsRetryingEvaluation(false);
+    }
   };
 
   return (
@@ -299,13 +370,64 @@ export function PrepWorkspace() {
           </TabsContent>
 
           <TabsContent value="review">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">复盘（占位）</CardTitle>
-                <CardDescription>后续会接评分结果、改进建议和参考答案。</CardDescription>
-              </CardHeader>
-              <CardContent className="text-sm text-muted-foreground">这块暂时是空壳，等提交评分链路完成后再填充。</CardContent>
-            </Card>
+            {!session ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">复盘</CardTitle>
+                  <CardDescription>先生成并提交一轮答案，再查看评分。</CardDescription>
+                </CardHeader>
+              </Card>
+            ) : !isSubmitted ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">复盘</CardTitle>
+                  <CardDescription>当前会话仍是草稿状态，提交答案后会生成评分。</CardDescription>
+                </CardHeader>
+              </Card>
+            ) : !session.evaluation ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">复盘</CardTitle>
+                  <CardDescription>已提交，但暂时没有评分数据。</CardDescription>
+                </CardHeader>
+              </Card>
+            ) : evaluationStatus === "pending" || evaluationStatus === "running" ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">复盘</CardTitle>
+                  <CardDescription>评分任务正在后台执行，页面会自动刷新结果。</CardDescription>
+                </CardHeader>
+              </Card>
+            ) : evaluationStatus === "failed" ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">复盘</CardTitle>
+                  <CardDescription className="text-destructive">
+                    评分失败：{session.evaluation.error || "未知错误"}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Button type="button" onClick={handleRetryEvaluation} disabled={isRetryingEvaluation}>
+                    {isRetryingEvaluation ? "重试中..." : "重试评分"}
+                  </Button>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="space-y-4">
+                <ReviewSummaryCard evaluation={session.evaluation} />
+                <WeakPointList weakPoints={session.evaluation.overall.weakPoints} />
+                <div className="space-y-3">
+                  {session.questions.map((question) => (
+                    <QuestionScoreCard
+                      key={`score_${question.id}`}
+                      question={question}
+                      answer={answerByQuestionID.get(question.id) || ""}
+                      score={scoreByQuestionID.get(question.id)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
           </TabsContent>
         </Tabs>
       </section>

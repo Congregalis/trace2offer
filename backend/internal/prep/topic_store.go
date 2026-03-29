@@ -19,6 +19,7 @@ var (
 	ErrKnowledgeStoreUnavailable = errors.New("prep knowledge store is unavailable")
 	ErrEmbedProviderUnavailable  = errors.New("prep embedding provider is unavailable")
 	ErrIndexStoreUnavailable     = errors.New("prep index store is unavailable")
+	ErrScoringEngineUnavailable  = errors.New("prep scoring engine is unavailable")
 	ErrTopicAlreadyExists        = errors.New("prep topic already exists")
 	ErrDocumentAlreadyExists     = errors.New("prep knowledge document already exists")
 )

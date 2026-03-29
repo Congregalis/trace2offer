@@ -14,6 +14,7 @@ import {
   PrepKnowledgeDocumentUpdateInput,
   PrepDraftAnswersSaveResult,
   PrepAnswer,
+  PrepEvaluation,
   PrepGenerationProgressEvent,
   PrepGenerationTrace,
   PrepLeadContextPreview,
@@ -173,6 +174,43 @@ interface APIPrepAnswer {
   submitted_at?: string;
 }
 
+interface APIPrepQuestionScoreSource {
+  title?: string;
+  score?: number;
+}
+
+interface APIPrepQuestionScore {
+  question_id?: number;
+  score?: number;
+  answered?: boolean;
+  summary?: string;
+  strengths?: string[];
+  improvements?: string[];
+  weak_points?: string[];
+  sources?: APIPrepQuestionScoreSource[];
+  trace?: Record<string, unknown>;
+}
+
+interface APIPrepOverallEvaluation {
+  average_score?: number;
+  answered_count?: number;
+  total_questions?: number;
+  strengths?: string[];
+  weak_points?: string[];
+  summary?: string;
+}
+
+interface APIPrepEvaluation {
+  status?: string;
+  error?: string;
+  started_at?: string;
+  completed_at?: string;
+  scores?: APIPrepQuestionScore[];
+  overall?: APIPrepOverallEvaluation;
+  overall_score?: number;
+  summary?: string;
+}
+
 interface APIPrepSession {
   id?: string;
   lead_id?: string;
@@ -187,7 +225,7 @@ interface APIPrepSession {
   sources?: APIPrepContextSource[];
   questions?: APIPrepQuestion[];
   answers?: APIPrepAnswer[];
-  evaluation?: unknown;
+  evaluation?: APIPrepEvaluation;
   reference_answers?: Record<string, unknown>;
   generation_trace?: {
     input_snapshot?: {
@@ -487,6 +525,65 @@ function normalizeAnswer(raw: APIPrepAnswer): PrepAnswer {
   };
 }
 
+function normalizeEvaluation(raw: APIPrepEvaluation | undefined): PrepEvaluation | undefined {
+  if (!raw || typeof raw !== "object") {
+    return undefined;
+  }
+
+  const normalizeList = (values: string[] | undefined): string[] =>
+    Array.isArray(values) ? values.map((item) => (item || "").trim()).filter((item) => item.length > 0) : [];
+
+  const scores = Array.isArray(raw.scores)
+    ? raw.scores
+        .map((item) => ({
+          questionId: typeof item?.question_id === "number" && Number.isFinite(item.question_id) ? Math.max(0, Math.floor(item.question_id)) : 0,
+          score: typeof item?.score === "number" && Number.isFinite(item.score) ? item.score : 0,
+          answered: Boolean(item?.answered),
+          summary: (item?.summary || "").trim(),
+          strengths: normalizeList(item?.strengths),
+          improvements: normalizeList(item?.improvements),
+          weakPoints: normalizeList(item?.weak_points),
+          sources: Array.isArray(item?.sources)
+            ? item.sources
+                .map((source) => ({
+                  title: (source?.title || "").trim(),
+                  score: typeof source?.score === "number" && Number.isFinite(source.score) ? source.score : 0,
+                }))
+                .filter((source) => source.title.length > 0)
+            : [],
+          trace: item?.trace && typeof item.trace === "object" ? item.trace : undefined,
+        }))
+        .filter((item) => item.questionId > 0)
+    : [];
+
+  const overall = {
+    averageScore:
+      typeof raw.overall?.average_score === "number" && Number.isFinite(raw.overall.average_score) ? raw.overall.average_score : 0,
+    answeredCount:
+      typeof raw.overall?.answered_count === "number" && Number.isFinite(raw.overall.answered_count)
+        ? Math.max(0, Math.floor(raw.overall.answered_count))
+        : 0,
+    totalQuestions:
+      typeof raw.overall?.total_questions === "number" && Number.isFinite(raw.overall.total_questions)
+        ? Math.max(0, Math.floor(raw.overall.total_questions))
+        : 0,
+    strengths: normalizeList(raw.overall?.strengths),
+    weakPoints: normalizeList(raw.overall?.weak_points),
+    summary: (raw.overall?.summary || "").trim(),
+  };
+
+  return {
+    status: (raw.status || "").trim(),
+    error: (raw.error || "").trim() || undefined,
+    startedAt: (raw.started_at || "").trim() || undefined,
+    completedAt: (raw.completed_at || "").trim() || undefined,
+    scores,
+    overall,
+    overallScore: typeof raw.overall_score === "number" && Number.isFinite(raw.overall_score) ? raw.overall_score : undefined,
+    summary: (raw.summary || "").trim() || undefined,
+  };
+}
+
 function normalizeGenerationTrace(raw: APIPrepSession["generation_trace"] | undefined): PrepGenerationTrace | undefined {
   if (!raw) {
     return undefined;
@@ -576,7 +673,7 @@ function normalizeSession(raw: APIPrepSession | undefined): PrepSession {
     sources,
     questions,
     answers,
-    evaluation: raw?.evaluation,
+    evaluation: normalizeEvaluation(raw?.evaluation),
     referenceAnswers: raw?.reference_answers || {},
     generationTrace,
     createdAt: (raw?.created_at || "").trim(),
@@ -1139,6 +1236,24 @@ export async function submitPrepSession(sessionId: string): Promise<PrepSession>
   });
   if (!response.ok) {
     throw await parseAPIError(response, "提交答案失败");
+  }
+
+  const payload = (await response.json()) as APISinglePayload<APIPrepSession>;
+  return normalizeSession(payload.data);
+}
+
+export async function retryPrepSessionEvaluation(sessionId: string): Promise<PrepSession> {
+  const normalizedSessionID = (sessionId || "").trim();
+  if (!normalizedSessionID) {
+    throw new Error("session_id is required");
+  }
+
+  const response = await fetch(getAPIURL(`/api/prep/sessions/${encodeSegment(normalizedSessionID)}/evaluation/retry`), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+  if (!response.ok) {
+    throw await parseAPIError(response, "重试评分失败");
   }
 
   const payload = (await response.json()) as APISinglePayload<APIPrepSession>;
