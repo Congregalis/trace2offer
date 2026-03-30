@@ -14,10 +14,11 @@ import {
   retryPrepSessionEvaluation,
   submitPrepSession,
 } from "@/lib/prep-api";
-import { DEFAULT_PREP_META, PrepAnswer, PrepGenerationTrace, PrepLeadContextPreview, PrepMeta, PrepSession } from "@/lib/prep-types";
+import { DEFAULT_PREP_META, PrepAnswer, PrepGenerationTrace, PrepLeadContextPreview, PrepMeta, PrepReferenceAnswer, PrepSession } from "@/lib/prep-types";
 import { AnswerDraftEditor } from "./answer-draft-editor";
 import { PrepConfigPanel, PrepGenerationConfig } from "./prep-config-panel";
 import { PrepContextPreviewCard } from "./prep-context-preview-card";
+import { ReferenceAnswerDrawer } from "./reference-answer-drawer";
 import { PrepRunTimeline } from "./prep-run-timeline";
 import { PrepTraceDrawer } from "./prep-trace-drawer";
 import { QuestionScoreCard } from "./question-score-card";
@@ -268,6 +269,17 @@ export function PrepWorkspace() {
     }
     return mapped;
   }, [session?.answers]);
+  const referenceAnswerByQuestionID = useMemo(() => {
+    const mapped = new Map<number, PrepReferenceAnswer>();
+    const all = session?.referenceAnswers || {};
+    for (const value of Object.values(all)) {
+      if (!value || value.questionId <= 0) {
+        continue;
+      }
+      mapped.set(value.questionId, value);
+    }
+    return mapped;
+  }, [session?.referenceAnswers]);
 
   const handleSubmitAnswers = async () => {
     if (!session?.id) {
@@ -291,6 +303,21 @@ export function PrepWorkspace() {
     } finally {
       setIsRetryingEvaluation(false);
     }
+  };
+
+  const handleReferenceAnswerGenerated = (questionId: number, generated: PrepReferenceAnswer) => {
+    setSession((previous) => {
+      if (!previous) {
+        return previous;
+      }
+      return {
+        ...previous,
+        referenceAnswers: {
+          ...previous.referenceAnswers,
+          [String(questionId)]: generated,
+        },
+      };
+    });
   };
 
   return (
@@ -423,6 +450,14 @@ export function PrepWorkspace() {
                       question={question}
                       answer={answerByQuestionID.get(question.id) || ""}
                       score={scoreByQuestionID.get(question.id)}
+                      referenceAction={
+                        <ReferenceAnswerDrawer
+                          sessionId={session.id}
+                          question={question}
+                          cachedReferenceAnswer={referenceAnswerByQuestionID.get(question.id)}
+                          onGenerated={(generated) => handleReferenceAnswerGenerated(question.id, generated)}
+                        />
+                      }
                     />
                   ))}
                 </div>

@@ -191,10 +191,13 @@ type OverallEvaluation struct {
 }
 
 type ReferenceAnswer struct {
-	QuestionID int      `json:"question_id"`
-	Summary    string   `json:"summary"`
-	Points     []string `json:"points"`
-	Source     string   `json:"source,omitempty"`
+	QuestionID      int                   `json:"question_id"`
+	ReferenceAnswer string                `json:"reference_answer"`
+	Sources         []QuestionScoreSource `json:"sources"`
+	GeneratedAt     string                `json:"generated_at,omitempty"`
+	Summary         string                `json:"summary,omitempty"`
+	Points          []string              `json:"points,omitempty"`
+	Source          string                `json:"source,omitempty"`
 }
 
 type GenerationTrace struct {

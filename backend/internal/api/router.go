@@ -156,6 +156,7 @@ func NewRouter(leads storage.LeadStore, candidates storage.CandidateStore, leadT
 		prep.PUT("/sessions/:session_id/draft-answers", h.updatePrepDraftAnswers)
 		prep.POST("/sessions/:session_id/submit", h.submitPrepSession)
 		prep.POST("/sessions/:session_id/evaluation/retry", h.retryPrepSessionEvaluation)
+		prep.POST("/sessions/:session_id/questions/:question_id/reference-answer", h.generatePrepReferenceAnswer)
 
 		api.GET("/calendar/interviews.ics", h.exportInterviewICS)
 		api.GET("/caldav/trace2offer", h.exportInterviewICS)
@@ -1158,6 +1159,37 @@ func (h *handler) retryPrepSessionEvaluation(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": updated})
 }
 
+func (h *handler) generatePrepReferenceAnswer(c *gin.Context) {
+	if h.prep == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"message": "prep service is not configured"})
+		return
+	}
+
+	sessionID := strings.TrimSpace(c.Param("session_id"))
+	if sessionID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "session_id is required"})
+		return
+	}
+
+	questionID, err := strconv.Atoi(strings.TrimSpace(c.Param("question_id")))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "question_id must be an integer"})
+		return
+	}
+
+	result, err := h.prep.GenerateReferenceAnswer(sessionID, questionID)
+	if err != nil {
+		if errors.Is(err, prep.ErrSessionNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"message": "prep session not found"})
+			return
+		}
+		respondPrepError(c, "generate prep reference answer failed", err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": result})
+}
+
 func (h *handler) createPrepSession(c *gin.Context) {
 	if h.prep == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"message": "prep service is not configured"})
@@ -1531,7 +1563,7 @@ func respondPrepError(c *gin.Context, message string, err error) {
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return
 	}
-	if errors.Is(err, prep.ErrPrepDisabled) || errors.Is(err, prep.ErrTopicStoreUnavailable) || errors.Is(err, prep.ErrKnowledgeStoreUnavailable) || errors.Is(err, prep.ErrIndexStoreUnavailable) || errors.Is(err, prep.ErrSessionStoreUnavailable) || errors.Is(err, prep.ErrIngestionUnavailable) || errors.Is(err, prep.ErrQuestionGeneratorUnavailable) || errors.Is(err, prep.ErrScoringEngineUnavailable) {
+	if errors.Is(err, prep.ErrPrepDisabled) || errors.Is(err, prep.ErrTopicStoreUnavailable) || errors.Is(err, prep.ErrKnowledgeStoreUnavailable) || errors.Is(err, prep.ErrIndexStoreUnavailable) || errors.Is(err, prep.ErrSessionStoreUnavailable) || errors.Is(err, prep.ErrIngestionUnavailable) || errors.Is(err, prep.ErrQuestionGeneratorUnavailable) || errors.Is(err, prep.ErrScoringEngineUnavailable) || errors.Is(err, prep.ErrReferenceAnswerUnavailable) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"message": err.Error()})
 		return
 	}

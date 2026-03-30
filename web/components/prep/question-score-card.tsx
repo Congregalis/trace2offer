@@ -1,3 +1,4 @@
+import { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PrepQuestion, PrepQuestionScore } from "@/lib/prep-types";
@@ -6,9 +7,10 @@ interface QuestionScoreCardProps {
   question: PrepQuestion;
   answer?: string;
   score?: PrepQuestionScore;
+  referenceAction?: ReactNode;
 }
 
-export function QuestionScoreCard({ question, answer, score }: QuestionScoreCardProps) {
+export function QuestionScoreCard({ question, answer, score, referenceAction }: QuestionScoreCardProps) {
   if (!score) {
     return (
       <Card>
@@ -49,6 +51,7 @@ export function QuestionScoreCard({ question, answer, score }: QuestionScoreCard
             ))}
           </ul>
         ) : null}
+        {referenceAction ? <div className="pt-2">{referenceAction}</div> : null}
       </CardContent>
     </Card>
   );

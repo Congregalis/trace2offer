@@ -223,6 +223,13 @@ export interface PrepEvaluation {
   summary?: string;
 }
 
+export interface PrepReferenceAnswer {
+  questionId: number;
+  referenceAnswer: string;
+  sources: PrepQuestionScoreSource[];
+  generatedAt?: string;
+}
+
 export interface PrepSessionConfig {
   questionCount: number;
   includeResume: boolean;
@@ -287,7 +294,7 @@ export interface PrepSession {
   questions: PrepQuestion[];
   answers: PrepAnswer[];
   evaluation?: PrepEvaluation;
-  referenceAnswers: Record<string, unknown>;
+  referenceAnswers: Record<string, PrepReferenceAnswer>;
   generationTrace?: PrepGenerationTrace;
   createdAt: string;
   updatedAt: string;

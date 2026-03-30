@@ -75,6 +75,7 @@ func TestLeadAndChatAPI(t *testing.T) {
 		prepConfig,
 		prep.WithIndexStore(prepIndexStore),
 		prep.WithEmbeddingProvider(&stubPrepEmbeddingProvider{}),
+		prep.WithQuestionModel(&stubPrepQuestionModel{}),
 	)
 	if err != nil {
 		t.Fatalf("init prep service: %v", err)
@@ -442,6 +443,26 @@ func TestLeadAndChatAPI(t *testing.T) {
 		if answer.SubmittedAt == nil || strings.TrimSpace(*answer.SubmittedAt) == "" {
 			t.Fatalf("expected submitted_at in answer, got %+v", answer)
 		}
+	}
+
+	resp = doJSONRequest(t, router, http.MethodPost, "/api/prep/sessions/prep_01/questions/1/reference-answer", nil)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("POST /api/prep/sessions/:session_id/questions/:question_id/reference-answer status=%d body=%s", resp.Code, resp.Body.String())
+	}
+	var referenceAnswerPayload struct {
+		Data prep.ReferenceAnswer `json:"data"`
+	}
+	decodeJSONBody(t, resp, &referenceAnswerPayload)
+	if referenceAnswerPayload.Data.QuestionID != 1 {
+		t.Fatalf("expected question_id=1, got %+v", referenceAnswerPayload.Data)
+	}
+	if strings.TrimSpace(referenceAnswerPayload.Data.ReferenceAnswer) == "" {
+		t.Fatalf("expected non-empty reference answer, got %+v", referenceAnswerPayload.Data)
+	}
+
+	resp = doJSONRequest(t, router, http.MethodPost, "/api/prep/sessions/prep_01/questions/99/reference-answer", nil)
+	if resp.Code != http.StatusBadRequest {
+		t.Fatalf("POST /api/prep/sessions/:session_id/questions/:question_id/reference-answer invalid question status=%d body=%s", resp.Code, resp.Body.String())
 	}
 
 	resp = doJSONRequest(t, router, http.MethodPost, "/api/prep/sessions/prep_01/submit", nil)
@@ -1120,6 +1141,28 @@ func (p *stubPrepEmbeddingProvider) Embed(texts []string) ([][]float32, error) {
 		vectors = append(vectors, []float32{0.5, 0.5})
 	}
 	return vectors, nil
+}
+
+type stubPrepQuestionModel struct{}
+
+func (m *stubPrepQuestionModel) Name() string {
+	return "stub-prep-question-model"
+}
+
+func (m *stubPrepQuestionModel) Generate(_ context.Context, systemPrompt string, userPrompt string) (string, error) {
+	joined := strings.ToLower(systemPrompt + "\n" + userPrompt)
+	switch {
+	case strings.Contains(joined, "<reference_answer_task>"):
+		return `{"reference_answer":"建议先定义状态模型与工具协议，再建立评测闭环并通过灰度指标持续迭代。"}`, nil
+	case strings.Contains(joined, "\"weak_points\""):
+		return `{"score":8.2,"answered":true,"summary":"回答主线清晰。","strengths":["覆盖了核心模块"],"improvements":["补充量化指标"],"weak_points":["风险策略描述不足"]}`, nil
+	case strings.Contains(joined, "<query_task>"):
+		return `{"query":"agent runtime tool memory context evaluation architecture"}`, nil
+	case strings.Contains(joined, "\"questions\""):
+		return `{"questions":[{"id":1,"type":"technical","content":"请说明 Agent Runtime 的状态管理与工具调用约束设计。","expected_points":["状态生命周期","工具契约","失败重试策略"],"context_sources":["overview.md"]},{"id":2,"type":"system_design","content":"如何在多 Agent 协作中控制成本与可观测性？","expected_points":["分层职责","成本预算","追踪指标"],"context_sources":["overview.md"]}]}`, nil
+	default:
+		return `{"query":"agent runtime architecture"}`, nil
+	}
 }
 
 func (s *stubAgentRuntime) Run(_ context.Context, request agentruntime.Request) (agentruntime.Response, error) {

@@ -15,21 +15,22 @@ import (
 )
 
 type Service struct {
-	config          Config
-	topicStore      *TopicStore
-	knowledgeStore  *KnowledgeStore
-	contextResolver *ContextResolver
-	sessionStore    *SessionStore
-	indexStore      *IndexStore
-	embedProvider   EmbeddingProvider
-	questionModel   QuestionModel
-	questionGen     *QuestionGenerator
-	retrievalEngine *RetrievalEngine
-	ingestion       *IngestionService
-	scoringEngine   *ScoringEngine
-	scoringMu       sync.Mutex
-	scoringInFlight map[string]struct{}
-	scoringAsync    bool
+	config             Config
+	topicStore         *TopicStore
+	knowledgeStore     *KnowledgeStore
+	contextResolver    *ContextResolver
+	sessionStore       *SessionStore
+	indexStore         *IndexStore
+	embedProvider      EmbeddingProvider
+	questionModel      QuestionModel
+	questionGen        *QuestionGenerator
+	retrievalEngine    *RetrievalEngine
+	ingestion          *IngestionService
+	scoringEngine      *ScoringEngine
+	referenceAnswerGen *ReferenceAnswerGenerator
+	scoringMu          sync.Mutex
+	scoringInFlight    map[string]struct{}
+	scoringAsync       bool
 }
 
 type ServiceOption func(*Service)
@@ -144,6 +145,9 @@ func NewService(config Config, options ...ServiceOption) (*Service, error) {
 	}
 	if service.scoringEngine == nil {
 		service.scoringEngine = NewScoringEngine(service.retrievalEngine, service.questionModel)
+	}
+	if service.referenceAnswerGen == nil {
+		service.referenceAnswerGen = NewReferenceAnswerGenerator(service.retrievalEngine, service.questionModel)
 	}
 	if service.indexStore != nil && service.embedProvider != nil {
 		ingestion, err := NewIngestionService(normalized.DataDir, IngestionDependencies{
@@ -638,6 +642,76 @@ func (s *Service) RetrySessionEvaluation(sessionID string) (Session, error) {
 	}
 	s.enqueueScoringJob(session.ID)
 	return *session, nil
+}
+
+func (s *Service) GenerateReferenceAnswer(sessionID string, questionID int) (ReferenceAnswer, error) {
+	if err := s.ensureEnabled(); err != nil {
+		return ReferenceAnswer{}, err
+	}
+	if s.sessionStore == nil {
+		return ReferenceAnswer{}, ErrSessionStoreUnavailable
+	}
+	if questionID <= 0 {
+		return ReferenceAnswer{}, &ValidationError{Field: "question_id", Message: "question_id must be greater than 0"}
+	}
+
+	session, err := s.sessionStore.Get(sessionID)
+	if err != nil {
+		if errors.Is(err, ErrSessionNotFound) {
+			return ReferenceAnswer{}, ErrSessionNotFound
+		}
+		return ReferenceAnswer{}, err
+	}
+	if strings.TrimSpace(session.Status) != PrepSessionStatusSubmitted {
+		return ReferenceAnswer{}, &ValidationError{Field: "status", Message: "only submitted session can generate reference answer"}
+	}
+	question, answerText, found := findQuestionAndAnswer(*session, questionID)
+	if !found {
+		return ReferenceAnswer{}, &ValidationError{Field: "question_id", Message: fmt.Sprintf("question_id %d not found in session", questionID)}
+	}
+
+	if session.ReferenceAnswers == nil {
+		session.ReferenceAnswers = map[string]ReferenceAnswer{}
+	}
+	cacheKey := referenceAnswerMapKey(questionID)
+	if cached, exists := session.ReferenceAnswers[cacheKey]; exists && strings.TrimSpace(cached.ReferenceAnswer) != "" {
+		return cached, nil
+	}
+
+	if s.referenceAnswerGen == nil {
+		return ReferenceAnswer{}, ErrReferenceAnswerUnavailable
+	}
+	generated, err := s.referenceAnswerGen.Generate(context.Background(), ReferenceAnswerInput{
+		Session:  *session,
+		Question: question,
+		Answer:   answerText,
+	})
+	if err != nil {
+		return ReferenceAnswer{}, err
+	}
+
+	latest, err := s.sessionStore.Get(sessionID)
+	if err != nil {
+		if errors.Is(err, ErrSessionNotFound) {
+			return ReferenceAnswer{}, ErrSessionNotFound
+		}
+		return ReferenceAnswer{}, err
+	}
+	if latest.ReferenceAnswers == nil {
+		latest.ReferenceAnswers = map[string]ReferenceAnswer{}
+	}
+	if cached, exists := latest.ReferenceAnswers[cacheKey]; exists && strings.TrimSpace(cached.ReferenceAnswer) != "" {
+		return cached, nil
+	}
+	latest.ReferenceAnswers[cacheKey] = generated
+	latest.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+	if err := s.sessionStore.Update(latest); err != nil {
+		if errors.Is(err, ErrSessionNotFound) {
+			return ReferenceAnswer{}, ErrSessionNotFound
+		}
+		return ReferenceAnswer{}, err
+	}
+	return generated, nil
 }
 
 func buildPendingEvaluation(totalQuestions int) *Evaluation {

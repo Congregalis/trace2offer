@@ -20,6 +20,7 @@ import {
   PrepLeadContextPreview,
   PrepMeta,
   PrepQuestion,
+  PrepReferenceAnswer,
   PrepRetrievalPreview,
   PrepRetrievalPreviewRequest,
   PrepScope,
@@ -174,6 +175,13 @@ interface APIPrepAnswer {
   submitted_at?: string;
 }
 
+interface APIPrepReferenceAnswer {
+  question_id?: number;
+  reference_answer?: string;
+  sources?: Array<{ title?: string; score?: number }>;
+  generated_at?: string;
+}
+
 interface APIPrepQuestionScoreSource {
   title?: string;
   score?: number;
@@ -226,7 +234,7 @@ interface APIPrepSession {
   questions?: APIPrepQuestion[];
   answers?: APIPrepAnswer[];
   evaluation?: APIPrepEvaluation;
-  reference_answers?: Record<string, unknown>;
+  reference_answers?: Record<string, APIPrepReferenceAnswer | undefined>;
   generation_trace?: {
     input_snapshot?: {
       lead_id?: string;
@@ -525,6 +533,24 @@ function normalizeAnswer(raw: APIPrepAnswer): PrepAnswer {
   };
 }
 
+function normalizeReferenceAnswer(raw: APIPrepReferenceAnswer | undefined): PrepReferenceAnswer {
+  const sources = Array.isArray(raw?.sources)
+    ? raw.sources
+        .map((item) => ({
+          title: (item?.title || "").trim(),
+          score: typeof item?.score === "number" && Number.isFinite(item.score) ? item.score : 0,
+        }))
+        .filter((item) => item.title.length > 0)
+    : [];
+
+  return {
+    questionId: typeof raw?.question_id === "number" && Number.isFinite(raw.question_id) ? Math.max(0, Math.floor(raw.question_id)) : 0,
+    referenceAnswer: (raw?.reference_answer || "").trim(),
+    sources,
+    generatedAt: (raw?.generated_at || "").trim() || undefined,
+  };
+}
+
 function normalizeEvaluation(raw: APIPrepEvaluation | undefined): PrepEvaluation | undefined {
   if (!raw || typeof raw !== "object") {
     return undefined;
@@ -655,6 +681,14 @@ function normalizeSession(raw: APIPrepSession | undefined): PrepSession {
     : [];
   const sources = Array.isArray(raw?.sources) ? raw.sources.map(normalizeContextSource) : [];
   const generationTrace = normalizeGenerationTrace(raw?.generation_trace);
+  const referenceAnswersRaw = raw?.reference_answers && typeof raw.reference_answers === "object" ? raw.reference_answers : {};
+  const referenceAnswers: Record<string, PrepReferenceAnswer> = {};
+  for (const [key, value] of Object.entries(referenceAnswersRaw || {})) {
+    const normalized = normalizeReferenceAnswer(value);
+    if (normalized.questionId > 0 && normalized.referenceAnswer.length > 0) {
+      referenceAnswers[key] = normalized;
+    }
+  }
 
   return {
     id: (raw?.id || "").trim(),
@@ -674,7 +708,7 @@ function normalizeSession(raw: APIPrepSession | undefined): PrepSession {
     questions,
     answers,
     evaluation: normalizeEvaluation(raw?.evaluation),
-    referenceAnswers: raw?.reference_answers || {},
+    referenceAnswers,
     generationTrace,
     createdAt: (raw?.created_at || "").trim(),
     updatedAt: (raw?.updated_at || "").trim(),
@@ -1258,4 +1292,29 @@ export async function retryPrepSessionEvaluation(sessionId: string): Promise<Pre
 
   const payload = (await response.json()) as APISinglePayload<APIPrepSession>;
   return normalizeSession(payload.data);
+}
+
+export async function generatePrepReferenceAnswer(sessionId: string, questionId: number): Promise<PrepReferenceAnswer> {
+  const normalizedSessionID = (sessionId || "").trim();
+  if (!normalizedSessionID) {
+    throw new Error("session_id is required");
+  }
+  const normalizedQuestionID = Number.isFinite(questionId) ? Math.floor(questionId) : 0;
+  if (normalizedQuestionID <= 0) {
+    throw new Error("question_id must be greater than 0");
+  }
+
+  const response = await fetch(
+    getAPIURL(`/api/prep/sessions/${encodeSegment(normalizedSessionID)}/questions/${encodeSegment(String(normalizedQuestionID))}/reference-answer`),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    },
+  );
+  if (!response.ok) {
+    throw await parseAPIError(response, "生成参考答案失败");
+  }
+
+  const payload = (await response.json()) as APISinglePayload<APIPrepReferenceAnswer>;
+  return normalizeReferenceAnswer(payload.data);
 }
