@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"trace2offer/backend/agent/provider/openai"
 )
 
 func TestManagedRuntimeUpdateSettings(t *testing.T) {
@@ -134,5 +136,83 @@ func TestManagedRuntimeInvalidResumeExtractor(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected invalid resume extractor error")
+	}
+}
+
+func TestManagedRuntimeUpdateSettingsSwitchesDefaultBaseURLForAPIFormat(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	manager, err := NewManagedRuntime(ManagedRuntimeConfig{
+		SettingsPath:        filepath.Join(tmpDir, "agent_runtime_config.json"),
+		SessionDataPath:     filepath.Join(tmpDir, "sessions"),
+		MemoryDataPath:      filepath.Join(tmpDir, "agent_memory.json"),
+		UserProfileDataPath: filepath.Join(tmpDir, "user_profile.json"),
+		ResumeDataDir:       filepath.Join(tmpDir, "resume"),
+		LeadManager:         &stubLeadManager{},
+		Defaults: RuntimeSettings{
+			Model:                "gpt-5-mini",
+			MaxSteps:             6,
+			SystemPrompt:         "default prompt",
+			OpenAIAPIFormat:      openai.APIFormatResponses,
+			OpenAIBaseURL:        openai.DefaultResponsesBaseURL,
+			OpenAITimeoutSeconds: 60,
+			OpenAIAPIKey:         "test_api_key",
+		},
+	})
+	if err != nil {
+		t.Fatalf("new managed runtime error: %v", err)
+	}
+
+	nextFormat := openai.APIFormatChatCompletions
+	updated, err := manager.UpdateSettings(context.Background(), RuntimeSettingsPatch{
+		OpenAIAPIFormat: &nextFormat,
+	})
+	if err != nil {
+		t.Fatalf("update settings error: %v", err)
+	}
+
+	if updated.OpenAIAPIFormat != openai.APIFormatChatCompletions {
+		t.Fatalf("expected api format %q, got %q", openai.APIFormatChatCompletions, updated.OpenAIAPIFormat)
+	}
+	if updated.OpenAIBaseURL != openai.DefaultChatCompletionsBaseURL {
+		t.Fatalf("expected base url %q, got %q", openai.DefaultChatCompletionsBaseURL, updated.OpenAIBaseURL)
+	}
+}
+
+func TestManagedRuntimeUpdateSettingsRejectsInvalidAPIFormat(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	manager, err := NewManagedRuntime(ManagedRuntimeConfig{
+		SettingsPath:        filepath.Join(tmpDir, "agent_runtime_config.json"),
+		SessionDataPath:     filepath.Join(tmpDir, "sessions"),
+		MemoryDataPath:      filepath.Join(tmpDir, "agent_memory.json"),
+		UserProfileDataPath: filepath.Join(tmpDir, "user_profile.json"),
+		ResumeDataDir:       filepath.Join(tmpDir, "resume"),
+		LeadManager:         &stubLeadManager{},
+		Defaults: RuntimeSettings{
+			Model:                "gpt-5-mini",
+			MaxSteps:             6,
+			SystemPrompt:         "default prompt",
+			OpenAIAPIFormat:      openai.APIFormatResponses,
+			OpenAIBaseURL:        openai.DefaultResponsesBaseURL,
+			OpenAITimeoutSeconds: 60,
+			OpenAIAPIKey:         "test_api_key",
+		},
+	})
+	if err != nil {
+		t.Fatalf("new managed runtime error: %v", err)
+	}
+
+	invalidFormat := "not_supported"
+	_, err = manager.UpdateSettings(context.Background(), RuntimeSettingsPatch{
+		OpenAIAPIFormat: &invalidFormat,
+	})
+	if err == nil {
+		t.Fatal("expected validation error for invalid api format")
+	}
+	if !IsSettingsValidationError(err) {
+		t.Fatalf("expected settings validation error, got %T %v", err, err)
 	}
 }

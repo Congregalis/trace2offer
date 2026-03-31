@@ -26,11 +26,12 @@ type BootstrapConfig struct {
 	AgentConfig        Config
 	OpenAIAPIKey       string
 	OpenAIModel        string
+	OpenAIAPIFormat    string
 	OpenAIBaseURL      string
 	OpenAITimeout      time.Duration
 }
 
-// NewDefaultRuntime builds a minimal runtime with OpenAI Responses provider.
+// NewDefaultRuntime builds a minimal runtime with OpenAI provider.
 func NewDefaultRuntime(config BootstrapConfig) (*Runtime, error) {
 	if config.LeadManager == nil {
 		return nil, fmt.Errorf("lead manager is required")
@@ -52,10 +53,11 @@ func NewDefaultRuntime(config BootstrapConfig) (*Runtime, error) {
 	}
 
 	openAIProvider, err := openai.New(openai.Config{
-		APIKey:  config.OpenAIAPIKey,
-		Model:   config.OpenAIModel,
-		BaseURL: config.OpenAIBaseURL,
-		Timeout: config.OpenAITimeout,
+		APIKey:    config.OpenAIAPIKey,
+		Model:     config.OpenAIModel,
+		APIFormat: config.OpenAIAPIFormat,
+		BaseURL:   config.OpenAIBaseURL,
+		Timeout:   config.OpenAITimeout,
 	})
 	if err != nil {
 		return nil, err

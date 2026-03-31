@@ -40,6 +40,7 @@ func main() {
 	port := getenv("PORT", "8080")
 	dataDir := getenv("T2O_DATA_DIR", "./data")
 	model := getenv("T2O_AGENT_MODEL", "gpt-5-mini")
+	openAIAPIFormat := getenv("T2O_OPENAI_API_FORMAT", "responses")
 	openAITimeoutSeconds, err := getenvInt("T2O_OPENAI_TIMEOUT_SECONDS", 60)
 	if err != nil {
 		log.Fatalf("invalid T2O_OPENAI_TIMEOUT_SECONDS: %v", err)
@@ -131,6 +132,7 @@ func main() {
 			Model:                model,
 			MaxSteps:             maxSteps,
 			SystemPrompt:         getenv("T2O_AGENT_SYSTEM_PROMPT", ""),
+			OpenAIAPIFormat:      openAIAPIFormat,
 			OpenAIBaseURL:        getenv("T2O_OPENAI_BASE_URL", ""),
 			OpenAITimeoutSeconds: openAITimeoutSeconds,
 			OpenAIAPIKey:         getenv("OPENAI_API_KEY", ""),

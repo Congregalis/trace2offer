@@ -30,11 +30,14 @@ import { toast } from "sonner";
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8080").replace(/\/$/, "");
 const DRAFT_SESSION_PREFIX = "draft_";
 const LOCAL_SESSION_PREFIX = "local_";
+const OPENAI_RESPONSES_BASE_URL = "https://api.openai.com/v1/responses";
+const OPENAI_CHAT_COMPLETIONS_BASE_URL = "https://api.openai.com/v1/chat/completions";
 
 interface AgentSettingsView {
   model: string;
   max_steps: number;
   system_prompt: string;
+  openai_api_format: string;
   openai_base_url: string;
   openai_timeout_seconds: number;
   has_openai_api_key: boolean;
@@ -44,6 +47,7 @@ interface AgentSettingsForm {
   model: string;
   maxSteps: number;
   systemPrompt: string;
+  openaiAPIFormat: string;
   openaiBaseURL: string;
   openaiTimeoutSeconds: number;
   openaiAPIKey: string;
@@ -130,6 +134,12 @@ const emptyUserProfileForm: UserProfileForm = {
 
 function getAPIURL(path: string): string {
   return `${API_BASE_URL}${path}`;
+}
+
+function defaultOpenAIBaseURLByFormat(format: string): string {
+  return format === "chat_completions"
+    ? OPENAI_CHAT_COMPLETIONS_BASE_URL
+    : OPENAI_RESPONSES_BASE_URL;
 }
 
 function createDraftSessionID(): string {
@@ -272,7 +282,8 @@ export function Chat() {
     model: "gpt-5-mini",
     maxSteps: 6,
     systemPrompt: "",
-    openaiBaseURL: "https://api.openai.com/v1/responses",
+    openaiAPIFormat: "responses",
+    openaiBaseURL: OPENAI_RESPONSES_BASE_URL,
     openaiTimeoutSeconds: 60,
     openaiAPIKey: "",
     hasOpenAIAPIKey: false,
@@ -462,6 +473,7 @@ export function Chat() {
         model: payload.data!.model,
         maxSteps: payload.data!.max_steps,
         systemPrompt: payload.data!.system_prompt,
+        openaiAPIFormat: payload.data!.openai_api_format,
         openaiBaseURL: payload.data!.openai_base_url,
         openaiTimeoutSeconds: payload.data!.openai_timeout_seconds,
         openaiAPIKey: "",
@@ -594,6 +606,7 @@ export function Chat() {
       model: settings.model.trim(),
       max_steps: Number(settings.maxSteps),
       system_prompt: settings.systemPrompt,
+      openai_api_format: settings.openaiAPIFormat.trim(),
       openai_base_url: settings.openaiBaseURL.trim(),
       openai_timeout_seconds: Number(settings.openaiTimeoutSeconds),
     };
@@ -619,6 +632,9 @@ export function Chat() {
 
       setSettings((prev) => ({
         ...prev,
+        openaiAPIFormat: body.data!.openai_api_format,
+        openaiBaseURL: body.data!.openai_base_url,
+        openaiTimeoutSeconds: body.data!.openai_timeout_seconds,
         openaiAPIKey: "",
         hasOpenAIAPIKey: body.data!.has_openai_api_key,
       }));
@@ -1063,6 +1079,33 @@ export function Chat() {
             </div>
 
             <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="agent-api-format">OpenAI 接口格式</Label>
+                <Select
+                  value={settings.openaiAPIFormat}
+                  onValueChange={(value) =>
+                    setSettings((prev) => ({
+                      ...prev,
+                      openaiAPIFormat: value,
+                      openaiBaseURL:
+                        prev.openaiBaseURL.trim() === "" ||
+                        prev.openaiBaseURL.trim() === defaultOpenAIBaseURLByFormat(prev.openaiAPIFormat.trim())
+                          ? defaultOpenAIBaseURLByFormat(value)
+                          : prev.openaiBaseURL,
+                    }))
+                  }
+                  disabled={isSettingsLoading || isSettingsSaving}
+                >
+                  <SelectTrigger id="agent-api-format">
+                    <SelectValue placeholder="选择接口格式" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="responses">responses</SelectItem>
+                    <SelectItem value="chat_completions">chat_completions</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
               <div className="space-y-2">
                 <Label htmlFor="agent-max-steps">最大步骤</Label>
                 <Input

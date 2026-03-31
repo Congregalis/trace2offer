@@ -44,6 +44,7 @@ type RuntimeSettings struct {
 	Model                string `json:"model"`
 	MaxSteps             int    `json:"max_steps"`
 	SystemPrompt         string `json:"system_prompt"`
+	OpenAIAPIFormat      string `json:"openai_api_format"`
 	OpenAIBaseURL        string `json:"openai_base_url"`
 	OpenAITimeoutSeconds int    `json:"openai_timeout_seconds"`
 	OpenAIAPIKey         string `json:"openai_api_key"`
@@ -54,6 +55,7 @@ type RuntimeSettingsView struct {
 	Model                string `json:"model"`
 	MaxSteps             int    `json:"max_steps"`
 	SystemPrompt         string `json:"system_prompt"`
+	OpenAIAPIFormat      string `json:"openai_api_format"`
 	OpenAIBaseURL        string `json:"openai_base_url"`
 	OpenAITimeoutSeconds int    `json:"openai_timeout_seconds"`
 	HasOpenAIAPIKey      bool   `json:"has_openai_api_key"`
@@ -64,16 +66,22 @@ type RuntimeSettingsPatch struct {
 	Model                *string `json:"model"`
 	MaxSteps             *int    `json:"max_steps"`
 	SystemPrompt         *string `json:"system_prompt"`
+	OpenAIAPIFormat      *string `json:"openai_api_format"`
 	OpenAIBaseURL        *string `json:"openai_base_url"`
 	OpenAITimeoutSeconds *int    `json:"openai_timeout_seconds"`
 	OpenAIAPIKey         *string `json:"openai_api_key"`
 }
 
 func (s RuntimeSettings) View() RuntimeSettingsView {
+	format := openai.NormalizeAPIFormat(s.OpenAIAPIFormat)
+	if format == "" {
+		format = openai.DefaultAPIFormat
+	}
 	return RuntimeSettingsView{
 		Model:                strings.TrimSpace(s.Model),
 		MaxSteps:             s.MaxSteps,
 		SystemPrompt:         s.SystemPrompt,
+		OpenAIAPIFormat:      format,
 		OpenAIBaseURL:        strings.TrimSpace(s.OpenAIBaseURL),
 		OpenAITimeoutSeconds: s.OpenAITimeoutSeconds,
 		HasOpenAIAPIKey:      strings.TrimSpace(s.OpenAIAPIKey) != "",
@@ -82,6 +90,10 @@ func (s RuntimeSettings) View() RuntimeSettingsView {
 
 func (p RuntimeSettingsPatch) Apply(base RuntimeSettings) RuntimeSettings {
 	next := base
+	prevFormat := openai.NormalizeAPIFormat(base.OpenAIAPIFormat)
+	if prevFormat == "" {
+		prevFormat = openai.DefaultAPIFormat
+	}
 	if p.Model != nil {
 		next.Model = strings.TrimSpace(*p.Model)
 	}
@@ -90,6 +102,21 @@ func (p RuntimeSettingsPatch) Apply(base RuntimeSettings) RuntimeSettings {
 	}
 	if p.SystemPrompt != nil {
 		next.SystemPrompt = *p.SystemPrompt
+	}
+	if p.OpenAIAPIFormat != nil {
+		nextFormat := openai.NormalizeAPIFormat(*p.OpenAIAPIFormat)
+		if nextFormat == "" && strings.TrimSpace(*p.OpenAIAPIFormat) == "" {
+			nextFormat = openai.DefaultAPIFormat
+		}
+		next.OpenAIAPIFormat = nextFormat
+
+		if p.OpenAIBaseURL == nil {
+			currentBaseURL := strings.TrimSpace(next.OpenAIBaseURL)
+			prevDefaultBaseURL := openai.DefaultBaseURLForFormat(prevFormat)
+			if currentBaseURL == "" || currentBaseURL == prevDefaultBaseURL {
+				next.OpenAIBaseURL = openai.DefaultBaseURLForFormat(nextFormat)
+			}
+		}
 	}
 	if p.OpenAIBaseURL != nil {
 		next.OpenAIBaseURL = strings.TrimSpace(*p.OpenAIBaseURL)
@@ -108,6 +135,7 @@ func mergeRuntimeSettings(defaults RuntimeSettings, loaded RuntimeSettings) Runt
 		Model:                strings.TrimSpace(defaults.Model),
 		MaxSteps:             defaults.MaxSteps,
 		SystemPrompt:         defaults.SystemPrompt,
+		OpenAIAPIFormat:      openai.NormalizeAPIFormat(defaults.OpenAIAPIFormat),
 		OpenAIBaseURL:        strings.TrimSpace(defaults.OpenAIBaseURL),
 		OpenAITimeoutSeconds: defaults.OpenAITimeoutSeconds,
 		OpenAIAPIKey:         strings.TrimSpace(defaults.OpenAIAPIKey),
@@ -122,6 +150,9 @@ func mergeRuntimeSettings(defaults RuntimeSettings, loaded RuntimeSettings) Runt
 	// System prompt allows empty string.
 	merged.SystemPrompt = loaded.SystemPrompt
 
+	if format := openai.NormalizeAPIFormat(loaded.OpenAIAPIFormat); format != "" {
+		merged.OpenAIAPIFormat = format
+	}
 	if baseURL := strings.TrimSpace(loaded.OpenAIBaseURL); baseURL != "" {
 		merged.OpenAIBaseURL = baseURL
 	}
@@ -132,8 +163,11 @@ func mergeRuntimeSettings(defaults RuntimeSettings, loaded RuntimeSettings) Runt
 		merged.OpenAIAPIKey = apiKey
 	}
 
+	if merged.OpenAIAPIFormat == "" {
+		merged.OpenAIAPIFormat = openai.DefaultAPIFormat
+	}
 	if merged.OpenAIBaseURL == "" {
-		merged.OpenAIBaseURL = openai.DefaultBaseURL
+		merged.OpenAIBaseURL = openai.DefaultBaseURLForFormat(merged.OpenAIAPIFormat)
 	}
 
 	return merged
@@ -145,6 +179,9 @@ func validateRuntimeSettings(settings RuntimeSettings) error {
 	}
 	if settings.MaxSteps <= 0 {
 		return &SettingsValidationError{Field: "max_steps", Message: "max_steps must be greater than 0"}
+	}
+	if !openai.IsSupportedAPIFormat(settings.OpenAIAPIFormat) {
+		return &SettingsValidationError{Field: "openai_api_format", Message: "openai_api_format must be one of: responses, chat_completions"}
 	}
 	if strings.TrimSpace(settings.OpenAIBaseURL) == "" {
 		return &SettingsValidationError{Field: "openai_base_url", Message: "openai_base_url is required"}
@@ -253,6 +290,7 @@ func runtimeSettingsEqual(a RuntimeSettings, b RuntimeSettings) bool {
 	return strings.TrimSpace(a.Model) == strings.TrimSpace(b.Model) &&
 		a.MaxSteps == b.MaxSteps &&
 		a.SystemPrompt == b.SystemPrompt &&
+		openai.NormalizeAPIFormat(a.OpenAIAPIFormat) == openai.NormalizeAPIFormat(b.OpenAIAPIFormat) &&
 		strings.TrimSpace(a.OpenAIBaseURL) == strings.TrimSpace(b.OpenAIBaseURL) &&
 		a.OpenAITimeoutSeconds == b.OpenAITimeoutSeconds &&
 		strings.TrimSpace(a.OpenAIAPIKey) == strings.TrimSpace(b.OpenAIAPIKey)
@@ -264,7 +302,8 @@ func defaultRuntimeSettings() RuntimeSettings {
 		Model:                defaults.Model,
 		MaxSteps:             defaults.MaxSteps,
 		SystemPrompt:         defaults.SystemPrompt,
-		OpenAIBaseURL:        openai.DefaultBaseURL,
+		OpenAIAPIFormat:      openai.DefaultAPIFormat,
+		OpenAIBaseURL:        openai.DefaultBaseURLForFormat(openai.DefaultAPIFormat),
 		OpenAITimeoutSeconds: int((60 * time.Second) / time.Second),
 		OpenAIAPIKey:         "",
 	}

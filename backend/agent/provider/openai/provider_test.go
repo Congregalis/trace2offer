@@ -221,3 +221,229 @@ func TestGenerateStream_FunctionCallArgumentsDelta(t *testing.T) {
 		t.Fatalf("unexpected response content: %q", resp.Content)
 	}
 }
+
+func TestNew_DefaultBaseURLByAPIFormat(t *testing.T) {
+	t.Parallel()
+
+	responsesProvider, err := New(Config{
+		APIKey: "test_key",
+		Model:  "test_model",
+	})
+	if err != nil {
+		t.Fatalf("new responses provider: %v", err)
+	}
+	if responsesProvider.baseURL != DefaultResponsesBaseURL {
+		t.Fatalf("unexpected responses base url: %q", responsesProvider.baseURL)
+	}
+
+	chatProvider, err := New(Config{
+		APIKey:    "test_key",
+		Model:     "test_model",
+		APIFormat: APIFormatChatCompletions,
+	})
+	if err != nil {
+		t.Fatalf("new chat provider: %v", err)
+	}
+	if chatProvider.baseURL != DefaultChatCompletionsBaseURL {
+		t.Fatalf("unexpected chat base url: %q", chatProvider.baseURL)
+	}
+}
+
+func TestNew_InvalidAPIFormat(t *testing.T) {
+	t.Parallel()
+
+	_, err := New(Config{
+		APIKey:    "test_key",
+		Model:     "test_model",
+		APIFormat: "wrong_format",
+	})
+	if err == nil {
+		t.Fatal("expected error for invalid api format")
+	}
+}
+
+func TestGenerate_ChatCompletionsReturnsMessageContent(t *testing.T) {
+	t.Parallel()
+
+	var received chatCompletionsRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&received); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"ok"}}]}`))
+	}))
+	t.Cleanup(server.Close)
+
+	p, err := New(Config{
+		APIKey:     "test_key",
+		Model:      "test_model",
+		APIFormat:  APIFormatChatCompletions,
+		BaseURL:    server.URL,
+		HTTPClient: server.Client(),
+	})
+	if err != nil {
+		t.Fatalf("new provider: %v", err)
+	}
+
+	resp, err := p.Generate(context.Background(), provider.Request{
+		Messages: []provider.Message{
+			{Role: "system", Content: "sys"},
+			{Role: "user", Content: "hello"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	if resp.Content != "ok" {
+		t.Fatalf("unexpected content: %q", resp.Content)
+	}
+	if len(received.Messages) != 2 {
+		t.Fatalf("expected 2 chat messages, got %d", len(received.Messages))
+	}
+}
+
+func TestGenerate_ChatCompletionsWithFunctionToolsReturnsArguments(t *testing.T) {
+	t.Parallel()
+
+	var received chatCompletionsRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&received); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"tool_calls":[{"function":{"arguments":"{\"questions\":[{\"id\":1}]}"}}]}}]}`))
+	}))
+	t.Cleanup(server.Close)
+
+	p, err := New(Config{
+		APIKey:     "test_key",
+		Model:      "test_model",
+		APIFormat:  APIFormatChatCompletions,
+		BaseURL:    server.URL,
+		HTTPClient: server.Client(),
+	})
+	if err != nil {
+		t.Fatalf("new provider: %v", err)
+	}
+
+	resp, err := p.Generate(context.Background(), provider.Request{
+		Messages: []provider.Message{{Role: "user", Content: "hello"}},
+		Tools: []provider.Tool{{
+			Type:        "function",
+			Name:        "emit_interview_questions",
+			Description: "return schema",
+			Strict:      true,
+			Parameters: map[string]any{
+				"type": "object",
+			},
+		}},
+		ToolChoice: &provider.ToolChoice{Type: "function", Name: "emit_interview_questions"},
+	})
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+
+	if strings.TrimSpace(resp.Content) != `{"questions":[{"id":1}]}` {
+		t.Fatalf("unexpected response content: %q", resp.Content)
+	}
+	if len(received.Tools) != 1 {
+		t.Fatalf("expected 1 tool, got %d", len(received.Tools))
+	}
+}
+
+func TestGenerateStream_ChatCompletionsEmitsDeltaAndReturnsFullText(t *testing.T) {
+	t.Parallel()
+
+	var received chatCompletionsRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&received); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: {\"choices\":[{\"delta\":{\"content\":\"O\"}}]}\n\n"))
+		_, _ = w.Write([]byte("data: {\"choices\":[{\"delta\":{\"content\":\"K\"}}]}\n\n"))
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	t.Cleanup(server.Close)
+
+	p, err := New(Config{
+		APIKey:     "test_key",
+		Model:      "test_model",
+		APIFormat:  APIFormatChatCompletions,
+		BaseURL:    server.URL,
+		HTTPClient: server.Client(),
+	})
+	if err != nil {
+		t.Fatalf("new provider: %v", err)
+	}
+
+	var deltas strings.Builder
+	resp, err := p.GenerateStream(context.Background(), provider.Request{
+		Messages: []provider.Message{{Role: "user", Content: "hello"}},
+	}, func(delta string) {
+		deltas.WriteString(delta)
+	})
+	if err != nil {
+		t.Fatalf("generate stream: %v", err)
+	}
+
+	if got := deltas.String(); got != "OK" {
+		t.Fatalf("unexpected deltas: %q", got)
+	}
+	if resp.Content != "OK" {
+		t.Fatalf("unexpected response content: %q", resp.Content)
+	}
+	if !received.Stream {
+		t.Fatal("expected stream=true in request payload")
+	}
+}
+
+func TestGenerateStream_ChatCompletionsFunctionCallArgumentsDelta(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"function\":{\"arguments\":\"{\\\"questions\\\":\"}}]}}]}\n\n"))
+		_, _ = w.Write([]byte("data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"function\":{\"arguments\":\"[]}\"}}]}}]}\n\n"))
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	t.Cleanup(server.Close)
+
+	p, err := New(Config{
+		APIKey:     "test_key",
+		Model:      "test_model",
+		APIFormat:  APIFormatChatCompletions,
+		BaseURL:    server.URL,
+		HTTPClient: server.Client(),
+	})
+	if err != nil {
+		t.Fatalf("new provider: %v", err)
+	}
+
+	var deltas strings.Builder
+	resp, err := p.GenerateStream(context.Background(), provider.Request{
+		Messages: []provider.Message{{Role: "user", Content: "hello"}},
+		Tools: []provider.Tool{{
+			Type:   "function",
+			Name:   "emit_interview_questions",
+			Strict: true,
+			Parameters: map[string]any{
+				"type": "object",
+			},
+		}},
+		ToolChoice: &provider.ToolChoice{Type: "function", Name: "emit_interview_questions"},
+	}, func(delta string) {
+		deltas.WriteString(delta)
+	})
+	if err != nil {
+		t.Fatalf("generate stream: %v", err)
+	}
+
+	if got := deltas.String(); got != `{"questions":[]}` {
+		t.Fatalf("unexpected deltas: %q", got)
+	}
+	if resp.Content != `{"questions":[]}` {
+		t.Fatalf("unexpected response content: %q", resp.Content)
+	}
+}

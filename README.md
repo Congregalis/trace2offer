@@ -114,11 +114,18 @@ cp backend/.env.example backend/.env
 
 ```bash
 OPENAI_API_KEY=your_openai_api_key
+# 可选: responses | chat_completions
+T2O_OPENAI_API_FORMAT=responses
+# 可选自定义（默认会随 T2O_OPENAI_API_FORMAT 自动切换）
+# responses: https://api.openai.com/v1/responses
+# chat_completions: https://api.openai.com/v1/chat/completions
+T2O_OPENAI_BASE_URL=
 ```
 
 说明：
 
 - 后端启动时会校验 `OPENAI_API_KEY`，必填。
+- `T2O_OPENAI_API_FORMAT` 默认 `responses`，可切到 `chat_completions`。
 - 默认数据目录是 `backend/data`。
 - 默认后端端口是 `8080`，前端默认跑在 `3000`。
 

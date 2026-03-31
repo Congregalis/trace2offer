@@ -303,11 +303,12 @@ func (m *ManagedRuntime) buildRuntime(settings RuntimeSettings) (*Runtime, error
 			MaxSteps:     settings.MaxSteps,
 			SystemPrompt: settings.SystemPrompt,
 		},
-		UserProfiles:  m.userProfiles,
-		OpenAIAPIKey:  settings.OpenAIAPIKey,
-		OpenAIModel:   settings.Model,
-		OpenAIBaseURL: settings.OpenAIBaseURL,
-		OpenAITimeout: time.Duration(settings.OpenAITimeoutSeconds) * time.Second,
+		UserProfiles:    m.userProfiles,
+		OpenAIAPIKey:    settings.OpenAIAPIKey,
+		OpenAIModel:     settings.Model,
+		OpenAIAPIFormat: settings.OpenAIAPIFormat,
+		OpenAIBaseURL:   settings.OpenAIBaseURL,
+		OpenAITimeout:   time.Duration(settings.OpenAITimeoutSeconds) * time.Second,
 	})
 }
 
