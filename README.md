@@ -126,6 +126,7 @@ T2O_OPENAI_BASE_URL=
 
 - 后端启动时会校验 `OPENAI_API_KEY`，必填。
 - `T2O_OPENAI_API_FORMAT` 默认 `responses`，可切到 `chat_completions`。
+- `Interview Prep` 的 Query 规划同样复用 `T2O_OPENAI_API_FORMAT` 与 `T2O_OPENAI_BASE_URL`。
 - 默认数据目录是 `backend/data`。
 - 默认后端端口是 `8080`，前端默认跑在 `3000`。
 

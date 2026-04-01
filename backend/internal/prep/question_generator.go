@@ -57,12 +57,13 @@ type openAIQuestionModel struct {
 	provider agentprovider.Provider
 }
 
-func NewOpenAIQuestionModel(apiKey string, baseURL string, modelName string, timeout time.Duration) (QuestionModel, error) {
+func NewOpenAIQuestionModel(apiKey string, baseURL string, apiFormat string, modelName string, timeout time.Duration) (QuestionModel, error) {
 	provider, err := openaiprovider.New(openaiprovider.Config{
-		APIKey:  strings.TrimSpace(apiKey),
-		BaseURL: strings.TrimSpace(baseURL),
-		Model:   strings.TrimSpace(modelName),
-		Timeout: timeout,
+		APIKey:    strings.TrimSpace(apiKey),
+		BaseURL:   strings.TrimSpace(baseURL),
+		APIFormat: strings.TrimSpace(apiFormat),
+		Model:     strings.TrimSpace(modelName),
+		Timeout:   timeout,
 	})
 	if err != nil {
 		return nil, err

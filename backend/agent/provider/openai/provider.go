@@ -390,15 +390,14 @@ func (p *Provider) generateChatCompletionsStream(
 
 		for _, choice := range event.Choices {
 			delta := choice.Delta
-			if content := strings.TrimSpace(delta.Content); content != "" {
+			if delta.Content != "" {
 				textBuilder.WriteString(delta.Content)
 				if onDelta != nil {
 					onDelta(delta.Content)
 				}
 			}
 			for _, toolCall := range delta.ToolCalls {
-				arguments := strings.TrimSpace(toolCall.Function.Arguments)
-				if arguments == "" {
+				if toolCall.Function.Arguments == "" {
 					continue
 				}
 				functionArgsBuilder.WriteString(toolCall.Function.Arguments)

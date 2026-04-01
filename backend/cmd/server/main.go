@@ -101,6 +101,7 @@ func main() {
 		questionModel, modelErr := prep.NewOpenAIQuestionModel(
 			getenv("OPENAI_API_KEY", ""),
 			getenv("T2O_OPENAI_BASE_URL", ""),
+			openAIAPIFormat,
 			model,
 			time.Duration(prepOpenAITimeoutSeconds)*time.Second,
 		)

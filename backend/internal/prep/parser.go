@@ -38,15 +38,15 @@ func parseQuestionScoreOutput(raw string, questionID int, answered bool) (Questi
 	}
 	strengths := normalizeStringList(parsed.Strengths)
 	if len(strengths) == 0 {
-		return QuestionScore{}, fmt.Errorf("missing required field: strengths")
+		strengths = []string{"无"}
 	}
 	improvements := normalizeStringList(parsed.Improvements)
 	if len(improvements) == 0 {
-		return QuestionScore{}, fmt.Errorf("missing required field: improvements")
+		improvements = []string{"无"}
 	}
 	weakPoints := normalizeStringList(parsed.WeakPoints)
 	if len(weakPoints) == 0 {
-		return QuestionScore{}, fmt.Errorf("missing required field: weak_points")
+		weakPoints = []string{"无"}
 	}
 
 	return QuestionScore{
